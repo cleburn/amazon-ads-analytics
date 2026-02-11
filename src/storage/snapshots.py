@@ -27,9 +27,34 @@ def save_weekly_snapshot(
     cursor = conn.cursor()
 
     try:
+        # Check for existing snapshot for this week and clean it up first
+        existing = cursor.execute(
+            "SELECT id FROM weekly_snapshots WHERE week_start = ?",
+            (week_start,),
+        ).fetchone()
+
+        if existing:
+            old_id = existing[0]
+            # Delete child records before replacing the snapshot
+            for child_table in [
+                "campaign_metrics",
+                "target_metrics",
+                "search_term_metrics",
+                "kdp_daily_sales",
+                "bid_recommendations",
+            ]:
+                cursor.execute(
+                    f"DELETE FROM {child_table} WHERE snapshot_id = ?",
+                    (old_id,),
+                )
+            cursor.execute(
+                "DELETE FROM weekly_snapshots WHERE id = ?",
+                (old_id,),
+            )
+
         # Insert snapshot record
         cursor.execute(
-            """INSERT OR REPLACE INTO weekly_snapshots (week_start, week_end, imported_at, notes)
+            """INSERT INTO weekly_snapshots (week_start, week_end, imported_at, notes)
                VALUES (?, ?, ?, ?)""",
             (week_start, week_end, datetime.now().isoformat(), notes),
         )

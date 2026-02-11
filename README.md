@@ -25,11 +25,15 @@ conda create -n ascension-ads python=3.11
 conda activate ascension-ads
 pip install -r requirements.txt
 
-# Weekly report
+# Weekly report (using the wrapper script)
+bash run-report.sh 2026-02-04 --save
+
+# Or run directly (supports multiple search term files)
 python analyze.py report \
   --week 2026-02-04 \
-  --search-terms "data/raw/search_term_report.xlsx" \
-  --kdp "data/raw/kdp_export.xlsx" \
+  --search-terms "data/raw/Sponsored_Products_Search_term_report.xlsx" \
+  --search-terms "data/raw/Sponsored_Products_Search_term_report (1).xlsx" \
+  --kdp "data/raw/KDP_Dashboard-*.xlsx" \
   --save
 
 # Trends over time (requires prior --save runs)
@@ -38,6 +42,8 @@ python analyze.py trends --metric acos --weeks 8
 # Lifetime summary
 python analyze.py lifetime
 ```
+
+`run-report.sh` handles conda activation and auto-discovers files in `data/raw/`. See [weekly-update-workflow.md](weekly-update-workflow.md) for the full export-to-report workflow.
 
 ## Architecture
 
@@ -55,7 +61,7 @@ src/analysis/
   asin_performance.py       ASIN target drilldown + flags
   keyword_performance.py    Keyword drilldown + flags
   search_terms.py           Drift detection, broad match expansion tracking
-  kdp_reconciliation.py     KDP vs ad-attributed sales reconciliation
+  kdp_reconciliation.py     KDP reconciliation, paired purchase detection, ad-influenced ROAS
   bid_recommendations.py    Max profitable bid calculator
 
 src/reports/
@@ -80,7 +86,8 @@ src/storage/
 
 - **Amazon Ads Search Term Report** (XLSX) — primary input, one row per search term per target per day, 14-day attribution window
 - **Amazon Ads Campaign Report** (CSV) — optional campaign-level summary
-- **KDP Sales Dashboard** (XLSX) — multi-sheet workbook with royalty and order data, supports both daily and monthly granularity
+- **KDP Dashboard Report** (XLSX) — preferred for weekly analysis; daily granularity for all formats via Combined Sales sheet
+- **KDP Orders/Lifetime Report** (XLSX) — monthly granularity; used for historical context. Auto-detected by the tool
 
 Raw data files are gitignored. Place exports in `data/raw/` to run reports.
 
