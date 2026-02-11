@@ -13,7 +13,7 @@ from src.ingest.kdp import load_kdp_report, load_kdp_orders
 from src.analysis.campaign_summary import generate_campaign_summary
 from src.analysis.asin_performance import analyze_asin_targets
 from src.analysis.keyword_performance import analyze_keywords
-from src.analysis.search_terms import analyze_search_terms
+from src.analysis.search_terms import analyze_search_terms, apply_asin_resolution
 from src.analysis.kdp_reconciliation import reconcile_kdp_sales
 from src.analysis.bid_recommendations import recommend_bids
 from src.reports.terminal import render_full_report
@@ -51,12 +51,14 @@ def cli():
               help="Path to campaign config YAML")
 @click.option("--save", is_flag=True, default=False,
               help="Save snapshot to SQLite database (Phase 2)")
+@click.option("--resolve-asins/--no-resolve-asins", default=True,
+              help="Resolve ASIN search terms to book titles (default: on)")
 @click.option("--no-terminal", is_flag=True, default=False,
               help="Skip terminal output (only write markdown)")
 @click.option("--output-dir", default="reports",
               help="Directory for markdown reports")
 def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
-           save, no_terminal, output_dir):
+           resolve_asins, save, no_terminal, output_dir):
     """Generate a weekly performance report from CSV/XLSX exports."""
     config = load_config(config_path)
 
@@ -125,6 +127,21 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
         kdp_orders_df=kdp_orders_df, config=config,
     )
     bid_recs = recommend_bids(targeting_df, config)
+
+    # Resolve ASIN search terms to book titles
+    if resolve_asins:
+        from src.utils.asin_resolver import resolve_asins as _resolve_asins
+
+        summary = search_term_analysis.get("summary", pd.DataFrame())
+        if not summary.empty:
+            terms = summary["search_term"].tolist()
+            asin_map = _resolve_asins(terms, scrape=True)
+            if asin_map:
+                search_term_analysis = apply_asin_resolution(
+                    search_term_analysis, asin_map
+                )
+                resolved_count = len(asin_map)
+                click.echo(f"  Resolved {resolved_count} ASIN search terms to titles")
 
     # Terminal output
     if not no_terminal:

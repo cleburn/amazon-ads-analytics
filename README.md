@@ -7,6 +7,7 @@ Built to manage ad campaigns for [Ascension: Knowing God in You](https://www.ama
 ## What It Does
 
 - **Weekly Reports**: Campaign rollups, per-target drilldowns, search term drift detection, KDP sales reconciliation, and max-profitable-bid calculations
+- **ASIN Resolution**: Resolves raw ASIN search terms to book titles so you can see which product pages your ads appeared on
 - **Flags & Recommendations**: Automatically identifies high-spend/no-order targets, underserving ASINs, bid misalignment, broad match drift, and attribution gaps
 - **Trend Tracking**: SQLite-backed historical snapshots with week-over-week comparisons
 - **Dual Output**: Rich terminal tables + Markdown reports for archiving
@@ -50,6 +51,7 @@ python analyze.py lifetime
 ```
 analyze.py                  CLI entry point (Click)
 config/campaigns.yaml       Campaign config, book data, timeline milestones
+data/asin_lookup.json       ASIN-to-title mapping for search term display names
 
 src/ingest/
   search_terms.py           Parse Amazon Search Term Report (CSV or XLSX)
@@ -60,9 +62,12 @@ src/analysis/
   campaign_summary.py       Campaign-level rollup with WoW comparison
   asin_performance.py       ASIN target drilldown + flags
   keyword_performance.py    Keyword drilldown + flags
-  search_terms.py           Drift detection, broad match expansion tracking
+  search_terms.py           Drift detection, broad match expansion, ASIN resolution
   kdp_reconciliation.py     KDP reconciliation, paired purchase detection, ad-influenced ROAS
   bid_recommendations.py    Max profitable bid calculator
+
+src/utils/
+  asin_resolver.py          ASIN-to-title lookup (JSON file + Amazon scraping fallback)
 
 src/reports/
   terminal.py               Rich console output (tables, panels, color-coded flags)
@@ -88,6 +93,8 @@ src/storage/
 - **Amazon Ads Campaign Report** (CSV) — optional campaign-level summary
 - **KDP Dashboard Report** (XLSX) — preferred for weekly analysis; daily granularity for all formats via Combined Sales sheet
 - **KDP Orders/Lifetime Report** (XLSX) — monthly granularity; used for historical context. Auto-detected by the tool
+
+- **ASIN Lookup** (`data/asin_lookup.json`) — maps competitor ASINs to book titles. Pre-seeded with the 12 campaign targets. Unknown ASINs encountered in reports are auto-scraped from Amazon and cached here.
 
 Raw data files are gitignored. Place exports in `data/raw/` to run reports.
 

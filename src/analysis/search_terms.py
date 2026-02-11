@@ -3,6 +3,48 @@
 import pandas as pd
 
 
+def apply_asin_resolution(result: dict, asin_map: dict) -> dict:
+    """Apply ASIN-to-title resolution to search term analysis results.
+
+    Rewrites search_term values in the summary DataFrame and updates
+    drift flag messages to use resolved titles.
+
+    Args:
+        result: Output dict from analyze_search_terms().
+        asin_map: Mapping of raw ASIN → display name from resolve_asins().
+
+    Returns:
+        The same result dict, mutated in place.
+    """
+    if not asin_map:
+        return result
+
+    # Resolve summary search terms
+    summary = result.get("summary", pd.DataFrame())
+    if not summary.empty and "search_term" in summary.columns:
+        result["summary"] = summary.copy()
+        result["summary"]["search_term"] = result["summary"]["search_term"].map(
+            lambda t: asin_map.get(t, t)
+        )
+
+    # Resolve ASINs in drift flag messages
+    drift_flags = result.get("drift_flags", [])
+    for flag in drift_flags:
+        st = flag.get("search_term", "")
+        tgt = flag.get("targeting", "")
+        st_display = asin_map.get(st, st)
+        tgt_display = asin_map.get(tgt, tgt)
+        if st_display != st or tgt_display != tgt:
+            flag["message"] = (
+                f"{flag['type'].replace('_', ' ').title()}: targeted '{tgt_display}' "
+                f"but appeared on '{st_display}' "
+                f"({flag.get('impressions', 0)} impressions, "
+                f"${flag.get('spend', 0):.2f} spend)"
+            )
+
+    return result
+
+
 def analyze_search_terms(
     search_term_df: pd.DataFrame,
     config: dict,

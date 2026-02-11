@@ -134,6 +134,7 @@ Summary: Download fresh Amazon Ads Search Term Report(s) and KDP Dashboard Repor
 ```
 analyze.py              CLI entry point (Click)
 config/campaigns.yaml   Campaign config, book data, timeline milestones
+data/asin_lookup.json   ASIN-to-title mapping for search term display names
 src/ingest/
   search_terms.py       Parse Amazon Search Term Report (CSV or XLSX)
   targeting.py          Parse Campaign Report + build_targeting_from_search_terms()
@@ -142,9 +143,11 @@ src/analysis/
   campaign_summary.py   Campaign-level rollup + WoW comparison
   asin_performance.py   ASIN target drilldown + flags
   keyword_performance.py Keyword drilldown + flags
-  search_terms.py       Drift detection, broad match expansion tracking
+  search_terms.py       Drift detection, broad match expansion, ASIN resolution
   kdp_reconciliation.py KDP reconciliation + paired purchase detection + ad-influenced ROAS
   bid_recommendations.py Max profitable bid calculator
+src/utils/
+  asin_resolver.py      ASIN-to-title lookup (JSON file + Amazon scraping fallback)
 src/reports/
   terminal.py           Rich console output (tables, panels, color-coded flags)
   markdown.py           Markdown file writer (reports/week-YYYY-MM-DD.md)
@@ -165,6 +168,7 @@ src/models/             Phase 3 placeholder (Bayesian bid optimizer — not yet 
 - **SQLite opt-in**: `--save` flag. Phase 1 works standalone without a database.
 - **Analysis modules return dicts + DataFrames**: Decoupled from rendering. Phase 3 optimizer can consume same structures.
 - **Column naming**: Internally uses `orders` and `sales` (not `orders_7d`/`sales_7d`) since attribution window varies (14-day in current exports).
+- **ASIN-to-title resolution**: Search terms that are ASINs (B0xx or 10-digit ISBNs) are resolved to book titles via `data/asin_lookup.json`. Unknown ASINs are scraped from Amazon product pages and cached to the JSON file. Controlled by `--resolve-asins/--no-resolve-asins` flag (on by default).
 
 ## Key Metrics & Formulas
 

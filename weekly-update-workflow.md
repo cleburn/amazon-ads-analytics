@@ -54,6 +54,9 @@ The report prints to Terminal and also saves a markdown file in `reports/`.
 - **Flags** — high-spend/zero-order targets are candidates for bid reduction or pausing
 - **Bid Recommendations** — if current bid exceeds max profitable bid, lower it
 - **Search Term Drift** — broad match expanding to irrelevant ASINs = wasted spend
+- **ASIN Placements** — search terms that are ASINs are resolved to book titles automatically. Check that your ads are appearing on relevant competitor books. Any "(unknown)" entries were ASINs that couldn't be looked up — you can manually add them to `data/asin_lookup.json`
+
+> **ASIN Resolution**: The tool resolves ASIN search terms to book titles using `data/asin_lookup.json`. Unknown ASINs are scraped from Amazon and cached automatically. If scraping causes issues, pass `--no-resolve-asins` to disable.
 
 ---
 
