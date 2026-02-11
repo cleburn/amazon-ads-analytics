@@ -230,11 +230,30 @@ def render_search_term_analysis(result: dict) -> None:
 def render_kdp_reconciliation(result: dict) -> None:
     """Render KDP sales reconciliation to terminal."""
     totals = result.get("totals", {})
+    title_format_breakdown = result.get("title_format_breakdown", pd.DataFrame())
     title_totals = result.get("title_totals", pd.DataFrame())
     gap = result.get("attribution_gap", {})
+    paired = result.get("paired_purchases", [])
+    ad_influenced = result.get("ad_influenced")
 
-    # Title breakdown
-    if not title_totals.empty:
+    # Title x Format breakdown (preferred) or title-only fallback
+    if not title_format_breakdown.empty:
+        table = Table(title="KDP Sales by Title & Format", show_lines=True)
+        table.add_column("Title", style="bold", max_width=50)
+        table.add_column("Format", justify="center")
+        table.add_column("Units", justify="right")
+        table.add_column("Royalty", justify="right")
+
+        for _, row in title_format_breakdown.iterrows():
+            table.add_row(
+                row["title"],
+                row["format"],
+                _fmt_int(row["units"]),
+                _fmt_dollar(row["royalty"]),
+            )
+
+        console.print(table)
+    elif not title_totals.empty:
         table = Table(title="KDP Sales by Title", show_lines=True)
         table.add_column("Title", style="bold")
         table.add_column("Units", justify="right")
@@ -249,6 +268,13 @@ def render_kdp_reconciliation(result: dict) -> None:
 
         console.print(table)
 
+    # Paired purchases
+    if paired:
+        paired_text = "[bold]Same-day Book 1 + Book 2 purchases (likely ad-driven):[/bold]\n"
+        for p in paired:
+            paired_text += f"  {p['date']}: {p['details']}\n"
+        console.print(Panel(paired_text.rstrip(), title="Paired Purchases Detected"))
+
     # Attribution gap panel
     gap_text = (
         f"KDP Total Units: {totals.get('kdp_units', 0)}\n"
@@ -257,7 +283,44 @@ def render_kdp_reconciliation(result: dict) -> None:
         f"({totals.get('attribution_gap_pct', 0):.1f}%)\n"
         f"KDP Royalty: {_fmt_dollar(totals.get('kdp_royalty', 0))}"
     )
+    note = gap.get("note", "")
+    if note:
+        gap_text += f"\n\n[dim]{note}[/dim]"
     console.print(Panel(gap_text, title="Attribution Gap"))
+
+    # Ad-influenced analysis
+    if ad_influenced:
+        inf = ad_influenced
+        spend = inf.get("ad_spend", 0)
+
+        inf_text = f"[bold]Since ads started ({inf.get('ads_start', 'N/A')}):[/bold]\n"
+        inf_text += f"  Total KDP units (all books/formats): {inf.get('post_ad_units', 0)}\n"
+        inf_text += f"  Total KDP royalty: {_fmt_dollar(inf.get('post_ad_royalty', 0))}\n"
+        inf_text += f"  Total ad spend: {_fmt_dollar(spend)}\n\n"
+
+        attr_roas = inf.get("attributed_roas")
+        inf_roas = inf.get("influenced_roas")
+        inf_text += f"  Amazon-Attributed ROAS:  {f'{attr_roas:.2f}x' if attr_roas else '—'}\n"
+        inf_text += f"  Ad-Influenced ROAS:      {f'{inf_roas:.2f}x' if inf_roas else '—'}"
+        inf_text += "  [dim](KDP royalty / ad spend)[/dim]\n"
+
+        # Post-ad breakdown
+        breakdown = inf.get("post_ad_breakdown", [])
+        if breakdown:
+            inf_text += "\n  [bold]Post-Ad Sales Breakdown:[/bold]\n"
+            for item in breakdown:
+                title_short = item["title"][:45]
+                inf_text += (
+                    f"    {title_short} ({item['format']}): "
+                    f"{item['units']} units, {_fmt_dollar(item['royalty'])}\n"
+                )
+
+        inf_note = inf.get("note", "")
+        if inf_note:
+            inf_text += f"\n[dim]{inf_note}[/dim]"
+
+        console.print(Panel(inf_text.rstrip(), title="Ad-Influenced Analysis"))
+
     console.print()
 
 

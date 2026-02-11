@@ -9,7 +9,7 @@ import yaml
 
 from src.ingest.search_terms import load_search_term_report
 from src.ingest.targeting import load_campaign_report, build_targeting_from_search_terms
-from src.ingest.kdp import load_kdp_report
+from src.ingest.kdp import load_kdp_report, load_kdp_orders
 from src.analysis.campaign_summary import generate_campaign_summary
 from src.analysis.asin_performance import analyze_asin_targets
 from src.analysis.keyword_performance import analyze_keywords
@@ -100,6 +100,11 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
     kdp_df = load_kdp_report(kdp_path)
     click.echo(f"  KDP sales: {len(kdp_df)} rows")
 
+    # Daily KDP orders (for paired purchase detection)
+    kdp_orders_df = load_kdp_orders(kdp_path)
+    if not kdp_orders_df.empty:
+        click.echo(f"  KDP daily orders: {len(kdp_orders_df)} rows")
+
     # Try to load prior week for WoW comparison
     prior_week_df = None
     if save:
@@ -115,7 +120,10 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
     asin_performance = analyze_asin_targets(targeting_df, config)
     keyword_performance = analyze_keywords(targeting_df, config)
     search_term_analysis = analyze_search_terms(search_term_df, config)
-    kdp_recon = reconcile_kdp_sales(kdp_df, campaign_summary, week, week_end_str)
+    kdp_recon = reconcile_kdp_sales(
+        kdp_df, campaign_summary, week, week_end_str,
+        kdp_orders_df=kdp_orders_df, config=config,
+    )
     bid_recs = recommend_bids(targeting_df, config)
 
     # Terminal output

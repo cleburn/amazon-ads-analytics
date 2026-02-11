@@ -163,18 +163,37 @@ def _search_term_section(result: dict) -> str:
 def _kdp_section(result: dict) -> str:
     """Generate KDP reconciliation markdown section."""
     totals = result.get("totals", {})
+    title_format_breakdown = result.get("title_format_breakdown", pd.DataFrame())
     title_totals = result.get("title_totals", pd.DataFrame())
     gap = result.get("attribution_gap", {})
+    paired = result.get("paired_purchases", [])
+    ad_influenced = result.get("ad_influenced")
 
     section = "## 5. KDP Sales Reconciliation\n\n"
 
-    if not title_totals.empty:
+    # Title x Format breakdown (preferred) or title-only fallback
+    if not title_format_breakdown.empty:
+        headers = ["Title", "Format", "Units", "Royalty"]
+        rows = []
+        for _, row in title_format_breakdown.iterrows():
+            rows.append([row["title"], row["format"], _fmt_int(row["units"]), _fmt_dollar(row["royalty"])])
+        section += _md_table(headers, rows) + "\n\n"
+    elif not title_totals.empty:
         headers = ["Title", "Units", "Royalty"]
         rows = []
         for _, row in title_totals.iterrows():
             rows.append([row["title"], _fmt_int(row["units"]), _fmt_dollar(row["royalty"])])
         section += _md_table(headers, rows) + "\n\n"
 
+    # Paired purchases
+    if paired:
+        section += "### Paired Purchases Detected\n\n"
+        section += "Same-day Book 1 + Book 2 purchases (likely ad-driven):\n\n"
+        for p in paired:
+            section += f"- **{p['date']}**: {p['details']}\n"
+        section += "\n"
+
+    # Attribution gap
     section += "### Attribution Gap\n\n"
     section += f"- **KDP Total Units**: {totals.get('kdp_units', 0)}\n"
     section += f"- **Ad-Attributed Orders**: {totals.get('ad_attributed_orders', 0)}\n"
@@ -183,6 +202,35 @@ def _kdp_section(result: dict) -> str:
 
     if gap.get("note"):
         section += f"\n> {gap['note']}\n"
+
+    # Ad-influenced analysis
+    if ad_influenced:
+        inf = ad_influenced
+        spend = inf.get("ad_spend", 0)
+
+        section += "\n### Ad-Influenced Analysis\n\n"
+        section += f"Since ads started ({inf.get('ads_start', 'N/A')}):\n\n"
+        section += f"- **Total KDP units** (all books/formats): {inf.get('post_ad_units', 0)}\n"
+        section += f"- **Total KDP royalty**: {_fmt_dollar(inf.get('post_ad_royalty', 0))}\n"
+        section += f"- **Total ad spend**: {_fmt_dollar(spend)}\n"
+
+        attr_roas = inf.get("attributed_roas")
+        inf_roas = inf.get("influenced_roas")
+        section += f"- **Amazon-Attributed ROAS**: {f'{attr_roas:.2f}x' if attr_roas else '—'}\n"
+        section += f"- **Ad-Influenced ROAS**: {f'{inf_roas:.2f}x' if inf_roas else '—'} (KDP royalty / ad spend)\n"
+
+        breakdown = inf.get("post_ad_breakdown", [])
+        if breakdown:
+            section += "\n**Post-Ad Sales Breakdown:**\n\n"
+            headers = ["Title", "Format", "Units", "Royalty"]
+            rows = []
+            for item in breakdown:
+                rows.append([item["title"], item["format"], _fmt_int(item["units"]), _fmt_dollar(item["royalty"])])
+            section += _md_table(headers, rows) + "\n"
+
+        inf_note = inf.get("note", "")
+        if inf_note:
+            section += f"\n> {inf_note}\n"
 
     return section
 

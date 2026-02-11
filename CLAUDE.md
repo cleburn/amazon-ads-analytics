@@ -51,13 +51,53 @@ Amazon exports are **XLSX** (not CSV). KDP exports are multi-sheet **XLSX** work
 - Campaign-level summary (one row per campaign). Optional input.
 - Has different column names than search term report (e.g., "Campaign name" vs "Campaign Name")
 
-### KDP Sales Dashboard (XLSX Workbook)
-- **Lifetime export** — contains full sales history, not just one week
-- Multiple sheets: Summary, Combined Sales, eBook Royalty, Paperback Royalty, Orders Processed, eBook Orders Placed, KENP Read
-- Royalty sheets use **monthly** date granularity (e.g., "2026-01"), not daily
-- eBook Orders Placed has daily granularity but only for ebooks
-- The tool auto-detects monthly vs daily granularity and adjusts the reconciliation window accordingly
+### KDP Reports (XLSX Workbooks)
+
+There are **two types** of KDP exports, both XLSX with the same sheet names but different granularity:
+
+#### KDP Dashboard Report (preferred for weekly analysis)
+- Exported from KDP Dashboard → Download. Date options: Today, Yesterday, **This Month** (use this one)
+- Filename pattern: `KDP_Dashboard-*.xlsx`
+- **Combined Sales** sheet: **DAILY** dates, ALL formats, with royalty — the primary data source
+- **Orders Processed** sheet: **DAILY** dates, all formats, with ASIN
+- **Paperback Royalty** sheet: **DAILY** royalty date + order date
+- **eBook Orders Placed** sheet: **DAILY** ebook orders (last 90 days only)
+- The tool reads Combined Sales first when daily data is detected
+- Only covers the selected period (e.g., current month), not lifetime
+
+#### KDP Orders Report (for historical/lifetime context)
+- Exported from KDP Reports → Orders. Can select Lifetime or custom date range
+- Filename pattern: `KDP_Orders-*.xlsx`
+- **Combined Sales** sheet: **MONTHLY** dates (YYYY-MM)
+- **Royalty sheets**: **MONTHLY**
+- **eBook Orders Placed** sheet: **DAILY** (only ebooks, last 90 days)
+- The tool falls back to individual royalty sheets when Combined Sales is monthly
+- Contains full sales history — useful for ad-influenced analysis across the entire ad period
+
+#### Auto-Detection Logic (`src/ingest/kdp.py`)
+The tool auto-detects which report type by checking dates in Combined Sales:
+- If dates have varying days → Dashboard report → use Combined Sales (daily, all formats)
+- If all dates are 1st-of-month → Orders/Lifetime report → fall back to individual royalty sheets
+
+#### Key Sheets Reference
+| Sheet | Dashboard Report | Orders/Lifetime Report | What It Contains |
+|-------|-----------------|----------------------|------------------|
+| Combined Sales | DAILY, all formats | MONTHLY, all formats | Royalty date, title, ASIN/ISBN, units, royalty. Format inferred from Transaction Type: "Standard" = ebook, "Standard - Paperback" = paperback |
+| Orders Processed | DAILY | MONTHLY | Date, title, ASIN, paid/free units. ASIN distinguishes format (B0... = ebook, 979... = paperback) |
+| Paperback Royalty | DAILY (has Order Date) | MONTHLY | Royalty date, order date, ISBN, ASIN, units, royalty |
+| eBook Orders Placed | DAILY | DAILY | Only ebooks, last 90 days. Used for paired purchase detection |
+| eBook Royalty | May be empty | MONTHLY | Ebook royalties |
+
 - Filter to Amazon.com marketplace (international sales exist but are separate)
+
+### Attribution Gap & Ad-Influenced Analysis
+
+Amazon ads target **Book 2 Kindle only**. Amazon only attributes a sale when the exact advertised ASIN is purchased after an ad click. But ads also drive:
+- **Book 2 Paperback** — visitor sees Kindle ad, buys paperback instead
+- **Book 1 (any format)** — halo/read-through effect from discovering Book 2
+- **Paired purchases** — both books bought together after an ad click
+
+The tool detects paired purchases from daily KDP data (same-day Book 1 + Book 2 orders) and calculates an "Ad-Influenced ROAS" using all KDP royalty since the ad start date, not just Amazon's attributed sales.
 
 ## Quick Start
 
@@ -65,12 +105,12 @@ Amazon exports are **XLSX** (not CSV). KDP exports are multi-sheet **XLSX** work
 conda activate ascension-ads
 pip install -r requirements.txt
 
-# Weekly analysis (multiple search term files supported)
+# Weekly analysis using KDP Dashboard report (daily granularity)
 python analyze.py report \
   --week 2026-02-04 \
   --search-terms "data/raw/Sponsored_Products_Search_term_report (1).xlsx" \
   --search-terms "data/raw/Sponsored_Products_Search_term_report.xlsx" \
-  --kdp "data/raw/KDP_Orders-823dff75-adfa-4f72-b784-1cd0a206b439.xlsx" \
+  --kdp "data/raw/KDP_Dashboard-*.xlsx" \
   --save
 
 # View trends (requires prior --save runs)
@@ -80,6 +120,16 @@ python analyze.py trends --metric acos --weeks 8
 python analyze.py lifetime
 ```
 
+## Weekly Export Workflow
+
+Each week, pull these 3 exports and place them in `data/raw/`:
+
+1. **Amazon Ads → Search Term Report** (XLSX): Advertising console → Reports → Search term. May need to pull multiple files for different date ranges.
+2. **KDP Dashboard Report** (XLSX): KDP Dashboard → select "This Month" → Download. This gives daily granularity for all formats in the Combined Sales sheet.
+3. **Amazon Ads → Campaign Report** (CSV, optional): Campaign-level summary for reference.
+
+The KDP Dashboard "This Month" report is preferred over the Orders/Lifetime report for weekly analysis because it provides **daily** dates for paperback sales (not just monthly). The lifetime report (`KDP_Orders-*.xlsx`) is kept in `data/raw/` for historical context and ad-influenced analysis across the full ad period.
+
 ## Architecture
 
 ```
@@ -88,13 +138,13 @@ config/campaigns.yaml   Campaign config, book data, timeline milestones
 src/ingest/
   search_terms.py       Parse Amazon Search Term Report (CSV or XLSX)
   targeting.py          Parse Campaign Report + build_targeting_from_search_terms()
-  kdp.py                Parse KDP multi-sheet XLSX workbook
+  kdp.py                Parse KDP multi-sheet XLSX (auto-detects Dashboard vs Lifetime)
 src/analysis/
   campaign_summary.py   Campaign-level rollup + WoW comparison
   asin_performance.py   ASIN target drilldown + flags
   keyword_performance.py Keyword drilldown + flags
   search_terms.py       Drift detection, broad match expansion tracking
-  kdp_reconciliation.py KDP vs ad-attributed reconciliation (handles monthly data)
+  kdp_reconciliation.py KDP reconciliation + paired purchase detection + ad-influenced ROAS
   bid_recommendations.py Max profitable bid calculator
 src/reports/
   terminal.py           Rich console output (tables, panels, color-coded flags)
@@ -110,7 +160,9 @@ src/models/             Phase 3 placeholder (Bayesian bid optimizer — not yet 
 - **No separate targeting report needed**: Per-target metrics are derived from search term report via `build_targeting_from_search_terms()`. Amazon's current export format doesn't provide a per-target breakdown as a separate report.
 - **Multiple search term files**: CLI accepts `--search-terms` multiple times. Files are concatenated before analysis. Amazon sometimes exports different date ranges as separate files.
 - **Bid enrichment from config**: Since per-target bid data isn't in the search term export, bids are mapped from `campaigns.yaml` target list.
-- **KDP monthly detection**: Reconciliation auto-detects if KDP dates are monthly (all 1st-of-month) and adjusts the comparison window. Notes in output explain the monthly-vs-weekly approximation.
+- **KDP auto-detection**: `load_kdp_report()` checks Combined Sales dates — daily = Dashboard report (use it directly), monthly = Lifetime report (fall back to individual royalty sheets). Format inferred from Transaction Type field.
+- **Paired purchase detection**: `_detect_paired_purchases()` uses daily eBook Orders Placed data to find same-day Book 1 + Book 2 orders — strong signal of ad-driven halo sales.
+- **Ad-influenced ROAS**: Compares total KDP royalty since ad start date against total ad spend, giving a more realistic picture than Amazon's attributed-only ROAS.
 - **SQLite opt-in**: `--save` flag. Phase 1 works standalone without a database.
 - **Analysis modules return dicts + DataFrames**: Decoupled from rendering. Phase 3 optimizer can consume same structures.
 - **Column naming**: Internally uses `orders` and `sales` (not `orders_7d`/`sales_7d`) since attribution window varies (14-day in current exports).

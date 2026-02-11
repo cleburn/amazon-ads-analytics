@@ -1,17 +1,22 @@
 """Parse KDP Sales Dashboard exports (CSV or XLSX multi-sheet workbook).
 
-KDP exports as XLSX workbooks with multiple sheets:
-  - Summary: Monthly aggregates
-  - Combined Sales: All royalties by month
-  - eBook Royalty: eBook detail
-  - Paperback Royalty: Paperback detail
-  - Hardcover Royalty: Hardcover detail
-  - Orders Processed: Paperback orders by month
-  - eBook Orders Placed: Daily eBook orders
-  - KENP Read: Kindle Unlimited page reads
+KDP has two export types, both XLSX with the same sheet names but different granularity:
 
-We use "Combined Sales" for royalty data and "eBook Orders Placed" + "Orders Processed"
-for unit counts with the best date granularity available.
+1. **Dashboard Report** (Today / Yesterday / This Month):
+   - Combined Sales: DAILY dates, all formats, with royalty — best single source
+   - Orders Processed: DAILY dates, all formats, with ASIN
+   - Paperback Royalty: DAILY royalty date + order date
+   - eBook Orders Placed: DAILY (ebooks only, last 90 days)
+
+2. **Orders Report** (custom date range / Lifetime):
+   - Combined Sales: MONTHLY dates (YYYY-MM)
+   - Orders Processed: MONTHLY
+   - Royalty sheets: MONTHLY
+   - eBook Orders Placed: DAILY (ebooks only)
+
+The tool auto-detects which type by checking date granularity in Combined Sales.
+When daily data is available, Combined Sales is the primary source (all formats, daily).
+When only monthly data is available, falls back to individual royalty sheets.
 """
 
 import pandas as pd
@@ -29,12 +34,25 @@ def _clean_currency(series: pd.Series) -> pd.Series:
     )
 
 
+def _infer_format(transaction_type: str) -> str:
+    """Infer book format from KDP Transaction Type field."""
+    t = str(transaction_type).lower()
+    if "paperback" in t:
+        return "paperback"
+    if "hardcover" in t:
+        return "hardcover"
+    return "ebook"
+
+
 def load_kdp_report(filepath: str) -> pd.DataFrame:
     """Load and normalize a KDP Sales Dashboard export.
 
     Handles both:
     - XLSX workbook (multi-sheet, actual KDP format)
     - CSV flat file (template/manual format)
+
+    Auto-detects Dashboard (daily) vs Orders/Lifetime (monthly) export.
+    Prefers Combined Sales sheet when daily data is available.
 
     Returns a DataFrame with columns:
         date, title, author, asin, format, units_sold, net_units_sold, royalty, marketplace
@@ -48,24 +66,40 @@ def load_kdp_report(filepath: str) -> pd.DataFrame:
 def _load_xlsx_workbook(filepath: str) -> pd.DataFrame:
     """Parse the multi-sheet KDP XLSX workbook.
 
-    Combines eBook and Paperback royalty sheets into a unified DataFrame.
+    Strategy:
+    1. Try Combined Sales first — if it has daily dates, use it (Dashboard report)
+    2. Fall back to individual royalty sheets (Lifetime/Orders report with monthly dates)
     """
     xls = pd.ExcelFile(filepath, engine="openpyxl")
+
+    # Try Combined Sales first
+    if "Combined Sales" in xls.sheet_names:
+        combined_df = _parse_combined_sales(xls)
+        if not combined_df.empty:
+            # Check if dates are daily (not all 1st-of-month)
+            dates = combined_df["date"].dropna()
+            is_daily = not dates.empty and not (dates.dt.day == 1).all()
+            if is_daily:
+                # Dashboard report — Combined Sales has daily data for all formats
+                if "marketplace" in combined_df.columns:
+                    combined_df = combined_df[
+                        combined_df["marketplace"].str.contains("Amazon.com", na=False)
+                    ].copy()
+                return combined_df
+
+    # Fall back to individual royalty sheets (Lifetime/Orders report)
     frames = []
 
-    # eBook Royalty sheet
     if "eBook Royalty" in xls.sheet_names:
         ebook_df = pd.read_excel(xls, sheet_name="eBook Royalty")
         ebook_df = _normalize_royalty_sheet(ebook_df, book_format="ebook")
         frames.append(ebook_df)
 
-    # Paperback Royalty sheet
     if "Paperback Royalty" in xls.sheet_names:
         pb_df = pd.read_excel(xls, sheet_name="Paperback Royalty")
         pb_df = _normalize_royalty_sheet(pb_df, book_format="paperback")
         frames.append(pb_df)
 
-    # Hardcover Royalty sheet
     if "Hardcover Royalty" in xls.sheet_names:
         hc_df = pd.read_excel(xls, sheet_name="Hardcover Royalty")
         if not hc_df.empty:
@@ -77,9 +111,73 @@ def _load_xlsx_workbook(filepath: str) -> pd.DataFrame:
 
     df = pd.concat(frames, ignore_index=True)
 
-    # Filter to Amazon.com marketplace
     if "marketplace" in df.columns:
         df = df[df["marketplace"].str.contains("Amazon.com", na=False)].copy()
+
+    return df
+
+
+def _parse_combined_sales(xls: pd.ExcelFile) -> pd.DataFrame:
+    """Parse the Combined Sales sheet.
+
+    This sheet has all formats in one place. In Dashboard reports it has
+    daily dates; in Lifetime reports it has monthly dates.
+
+    The Transaction Type field determines the format:
+    - "Standard" → ebook
+    - "Standard - Paperback" → paperback
+    - "Standard - Hardcover" → hardcover
+    """
+    df = pd.read_excel(xls, sheet_name="Combined Sales")
+
+    if df.empty:
+        return pd.DataFrame()
+
+    col_map = {
+        "Royalty Date": "date",
+        "Title": "title",
+        "Author Name": "author",
+        "ASIN": "asin",
+        "ASIN/ISBN": "asin",
+        "ISBN": "isbn",
+        "Marketplace": "marketplace",
+        "Royalty Type": "royalty_type",
+        "Transaction Type": "transaction_type",
+        "Units Sold": "units_sold",
+        "Units Refunded": "units_refunded",
+        "Net Units Sold": "net_units_sold",
+        "Avg. List Price without tax": "avg_list_price",
+        "Avg. Offer Price without tax": "avg_offer_price",
+        "Avg. Delivery/Manufacturing cost": "delivery_cost",
+        "Avg. Delivery Cost": "delivery_cost",
+        "Avg. Manufacturing Cost": "manufacturing_cost",
+        "Royalty": "royalty",
+        "Currency": "currency",
+    }
+
+    df.columns = df.columns.str.strip()
+    rename_map = {k: v for k, v in col_map.items() if k in df.columns}
+    df = df.rename(columns=rename_map)
+
+    # Infer format from Transaction Type
+    if "transaction_type" in df.columns:
+        df["format"] = df["transaction_type"].apply(_infer_format)
+    else:
+        df["format"] = "ebook"
+
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], format="mixed", errors="coerce")
+
+    for col in ["units_sold", "units_refunded", "net_units_sold"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+
+    for col in ["royalty", "avg_list_price", "avg_offer_price"]:
+        if col in df.columns:
+            if df[col].dtype == object:
+                df[col] = _clean_currency(df[col])
+            else:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
 
     return df
 
@@ -114,11 +212,9 @@ def _normalize_royalty_sheet(df: pd.DataFrame, book_format: str) -> pd.DataFrame
 
     df["format"] = book_format
 
-    # Parse date (KDP uses YYYY-MM format for royalty dates)
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"], format="mixed", errors="coerce")
 
-    # Clean numeric columns
     for col in ["units_sold", "units_refunded", "net_units_sold"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
@@ -137,7 +233,8 @@ def load_kdp_orders(filepath: str) -> pd.DataFrame:
     """Load daily order data from the KDP workbook.
 
     Uses "eBook Orders Placed" for daily eBook data and
-    "Orders Processed" for paperback data (monthly granularity).
+    "Orders Processed" for all-format order data.
+    Format is inferred from ASIN when not explicitly tagged.
     """
     if not filepath.endswith((".xlsx", ".xls")):
         return pd.DataFrame()
@@ -175,9 +272,14 @@ def load_kdp_orders(filepath: str) -> pd.DataFrame:
             "Paid Units": "paid_units",
             "Free Units": "free_units",
         })
-        # Orders Processed includes all formats — these are paperback ASINs
-        df["format"] = "paperback"
         df["date"] = pd.to_datetime(df["date"], format="mixed", errors="coerce")
+        # Infer format from ASIN: B0... = ebook/kindle, 979.../978... = paperback ISBN
+        if "asin" in df.columns:
+            df["format"] = df["asin"].apply(
+                lambda x: "ebook" if str(x).startswith("B0") else "paperback"
+            )
+        else:
+            df["format"] = "paperback"
         if "marketplace" in df.columns:
             df = df[df["marketplace"].str.contains("Amazon.com", na=False)].copy()
         frames.append(df)
@@ -207,7 +309,6 @@ def _load_csv(filepath: str) -> pd.DataFrame:
         "Royalty": "royalty",
     }
 
-    # Find header row
     header_row = 0
     with open(filepath, "r", encoding="utf-8-sig") as f:
         for i, line in enumerate(f):
@@ -233,7 +334,6 @@ def _load_csv(filepath: str) -> pd.DataFrame:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
 
-    # Infer format from ASIN
     if "format" not in df.columns and "asin" in df.columns:
         df["format"] = df["asin"].apply(
             lambda x: "ebook" if str(x).startswith("B0") else "paperback"
