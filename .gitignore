@@ -1,0 +1,51 @@
+# --- Data files ---
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Safety net — no XLSX/CSV data committed accidentally
+*.xlsx
+*.gz
+
+# --- Database ---
+db/*.db
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# --- Environments ---
+.env
+*.env
+.venv/
+venv/
+ENV/
+env/
+
+# --- Anaconda / Jupyter ---
+**/anaconda_projects/
+**/.virtual_documents/
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+*.nbconvert.ipynb
+
+# --- IDE ---
+.vscode/
+.idea/
+
+# --- System ---
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+
+# --- Claude Code ---
+.claude/

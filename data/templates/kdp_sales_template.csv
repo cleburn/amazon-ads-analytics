@@ -1,0 +1,5 @@
+Date,Title,Author,ASIN,Marketplace,Royalty Type,Transaction Type,Units Sold,Units Returned,Net Units Sold,Currency,Average List Price,Average Offer Price,Royalty
+2025-02-10,Book 1,Author Name,B0XXXXXXX1,Amazon.com,70%,Sale,2,0,2,USD,$9.99,$9.99,$13.98
+2025-02-10,Book 1,Author Name,0000000001,Amazon.com,60%,Sale,1,0,1,USD,$14.99,$14.99,$3.54
+2025-02-11,Book 2,Author Name,B0XXXXXXX2,Amazon.com,70%,Sale,1,0,1,USD,$9.99,$9.99,$6.99
+2025-02-12,Book 1,Author Name,B0XXXXXXX1,Amazon.com,70%,Sale,1,0,1,USD,$9.99,$9.99,$6.99

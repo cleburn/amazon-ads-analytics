@@ -1,0 +1,105 @@
+books:
+  book_1:
+    title: "Ascension: Knowing God in You: Removing the Veil to Source & Activating the Christos Within"
+    short_title: "Ascension Book 1"
+    asin_kindle: "B0CW1BMHMZ"
+    asin_paperback: "B0CY8YG9Q1"
+    isbn_paperback: "9798884892651"
+    kindle_price: 7.99
+    paperback_price: 11.99
+    kindle_royalty: 5.53
+    paperback_royalty: 4.89
+    published: "2024-03"
+  book_2:
+    title: "Ascension: Knowing God in You: Book 2: I AM, Unveiled"
+    short_title: "Ascension Book 2"
+    asin_kindle: "B0G873GXM4"
+    asin_paperback: "B0G8JJCFP2"
+    isbn_paperback: "9798261892403"
+    kindle_price: 9.99
+    paperback_price: 22.99
+    kindle_royalty: 6.93
+    paperback_royalty: 3.75
+    published: "2025-12"
+
+settings:
+  target_acos: 0.50
+  blended_royalty: 5.00
+  high_spend_flag: 5.00
+  low_impressions_flag: 10
+  attribution_window_days: 14
+
+# Key dates for interpreting trends and annotating reports
+timeline:
+  book_1_launch: "2024-03"
+  book_2_launch: "2025-12"
+  email_campaign:
+    date: "2025-12"
+    description: "3-part email campaign to 460-person list. First sales push for Book 2."
+    list_size: 460
+  book_2_3_reviews_milestone: "2026-01"
+  amazon_ads_start: "2026-01-26"
+  # Book 1 had a sales gap from ~May 2025 to Nov 2025 (zero or near-zero sales)
+  # The email campaign in Dec 2025 reactivated sales for both books
+  # Ads launched once Book 2 had 3 Amazon reviews (late Jan 2026)
+
+campaigns:
+  asin_targeting:
+    name: "Ascension Book2 - ASIN Targeting"
+    type: "product_targeting"
+    daily_budget: 8.00
+    match_type: "exact"
+    start_date: "2026-01-26"
+    targets:
+      - asin: "0997935502"
+        title: "The Sophia Code (Paperback)"
+        bid: 0.75
+      - asin: "B01K1T4U5U"
+        title: "The Sophia Code (Kindle)"
+        bid: 0.75
+      - asin: "B00JW44IAI"
+        title: "Autobiography of a Yogi (Kindle)"
+        bid: 0.75
+      - asin: "1585427934"
+        title: "I Am the Word (Paperback)"
+        bid: 0.65
+      - asin: "B003NX7NDI"
+        title: "I Am the Word (Kindle)"
+        bid: 0.65
+      - asin: "1401954901"
+        title: "Mary Magdalene Revealed (Hardcover)"
+        bid: 0.56
+      - asin: "B07PLK57L4"
+        title: "Mary Magdalene Revealed (Kindle)"
+        bid: 0.56
+      - asin: "1401941699"
+        title: "Power vs Force (Paperback)"
+        bid: 0.75
+      - asin: "0670869759"
+        title: "A Course in Miracles (Paperback)"
+        bid: 0.55
+      - asin: "B0018A01L4"
+        title: "A Course in Miracles (Kindle)"
+        bid: 0.55
+      - asin: "1572245379"
+        title: "The Untethered Soul (Paperback)"
+        bid: 0.46
+      - asin: "B0062C5V4A"
+        title: "Gospel of Thomas (Kindle)"
+        bid: 0.35
+
+  keyword_targeting:
+    name: "Ascension Book2 - Keyword Targeting"
+    type: "keyword_targeting"
+    daily_budget: 5.00
+    match_type: "broad"
+    start_date: "2026-01-26"
+    note: "28 keywords, bids range $0.13-$0.61"
+
+  self_targeting:
+    name: "Ascension Book2 - Self Targeting"
+    type: "product_targeting"
+    daily_budget: 2.00
+    match_type: "exact"
+    start_date: "2026-02-03"
+    note: "Book 1 pages targeting Book 2. Currently getting zero impressions."

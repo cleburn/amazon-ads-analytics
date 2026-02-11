@@ -1,0 +1,9 @@
+Sponsored Products - Targeting report
+Campaign: All campaigns
+Date Range: Feb 10, 2025 - Feb 16, 2025
+Campaign Name,Ad Group Name,Targeting,Match Type,Bid,Impressions,Clicks,Click-Thru Rate (CTR),Cost Per Click (CPC),Spend,7 Day Total Sales,Total Advertising Cost of Sales (ACoS),7 Day Total Orders (#)
+ASIN Targeting,Ad Group 1,asin="0997935502",exact,$0.75,150,3,2.00%,$0.72,$2.16,$14.99,14.41%,1
+ASIN Targeting,Ad Group 1,asin="B01K1T4U5U",exact,$0.75,200,5,2.50%,$0.68,$3.40,$0.00,0.00%,0
+ASIN Targeting,Ad Group 1,asin="B00JW44IAI",exact,$0.75,0,0,0.00%,$0.00,$0.00,$0.00,0.00%,0
+Keyword Targeting,Ad Group 1,spiritual awakening books,broad,$0.45,80,2,2.50%,$0.45,$0.90,$9.99,9.01%,1
+Self Targeting,Ad Group 1,asin="B0XXXXXXXX",exact,$0.50,0,0,0.00%,$0.00,$0.00,$0.00,0.00%,0
