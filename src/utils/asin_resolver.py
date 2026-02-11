@@ -4,6 +4,7 @@ Resolves raw ASINs (e.g., "b0fkp8tnds", "0063426285") to human-readable
 book titles using a local JSON lookup file and optional Amazon scraping.
 """
 
+import html
 import json
 import os
 import re
@@ -52,32 +53,50 @@ def _save_lookup(lookup: dict, path: str) -> None:
         f.write("\n")
 
 
+def _clean_title(raw: str) -> str | None:
+    """Clean a raw scraped title. Returns None if the title is junk."""
+    # Decode HTML entities (&#x27; → ', &amp; → &, etc.)
+    raw = html.unescape(raw)
+    # Strip "Amazon.com: " prefix
+    raw = re.sub(r"^Amazon\.com:\s*", "", raw)
+    # Reject if nothing left but "Amazon.com" (CAPTCHA / bot block page)
+    if not raw or raw.strip().lower() in ("amazon.com", "page not found"):
+        return None
+    # Strip trailing ": Books" or ": Kindle Store" etc.
+    raw = re.sub(r"\s*:\s*(Books|Kindle Store)\s*$", "", raw)
+    # Strip "Author, Name: ISBN: Amazon.com" suffix from <title> tags
+    # Pattern: ": Author: 978...: Amazon.com" at end
+    raw = re.sub(r":\s*\d{13,}:\s*Amazon\.com\s*$", "", raw)
+    raw = re.sub(r"\s*:\s*Amazon\.com\s*$", "", raw)
+    # Strip "eBook : Author" suffix (Kindle titles)
+    raw = re.sub(r"\s*eBook\s*:\s*.+$", "", raw)
+    # Strip author after last ": Author, Name" if it follows an ISBN-like pattern
+    # But keep subtitles — only strip if what follows looks like "Lastname, First"
+    raw = re.sub(r":\s*[A-Z][a-z]+,\s*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s*$", "", raw)
+    raw = raw.strip().rstrip(":")
+    if not raw or raw.strip().lower() == "amazon.com":
+        return None
+    return raw
+
+
 def _scrape_amazon_title(asin: str) -> str | None:
     """Attempt to scrape the product title from Amazon's product page.
 
-    Returns the title string if successful, None if blocked/failed.
+    Returns the cleaned title string if successful, None if blocked/failed.
     """
     url = f"https://www.amazon.com/dp/{asin.upper()}"
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
-            html = resp.read().decode("utf-8", errors="replace")
-        # Try the <title> tag first — Amazon titles are like:
-        # "Amazon.com: Book Title: Author: Books"
-        title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.DOTALL)
-        if title_match:
-            raw = title_match.group(1).strip()
-            # Strip "Amazon.com: " prefix and trailing ": Books" etc.
-            raw = re.sub(r"^Amazon\.com:\s*", "", raw)
-            raw = re.sub(r"\s*:\s*Books\s*$", "", raw)
-            # Also strip author suffix after last colon if it's short
-            # e.g. "Book Title: Author Name" — keep it, it's useful context
-            if raw and len(raw) < 200:
-                return raw
-        # Fallback: productTitle span
-        pt_match = re.search(r'id="productTitle"[^>]*>(.*?)</span>', html, re.DOTALL)
+            page = resp.read().decode("utf-8", errors="replace")
+        # Try productTitle span first (most reliable when present)
+        pt_match = re.search(r'id="productTitle"[^>]*>(.*?)</span>', page, re.DOTALL)
         if pt_match:
-            return pt_match.group(1).strip()
+            return _clean_title(pt_match.group(1).strip())
+        # Fallback: <title> tag
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", page, re.DOTALL)
+        if title_match:
+            return _clean_title(title_match.group(1).strip())
     except (urllib.error.URLError, urllib.error.HTTPError, OSError):
         pass
     return None
