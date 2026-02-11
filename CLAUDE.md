@@ -105,11 +105,14 @@ The tool detects paired purchases from daily KDP data (same-day Book 1 + Book 2 
 conda activate ascension-ads
 pip install -r requirements.txt
 
-# Weekly analysis using KDP Dashboard report (daily granularity)
+# Weekly report (wrapper script handles conda + file discovery)
+bash run-report.sh 2026-02-04 --save
+
+# Or run directly (supports multiple search term files)
 python analyze.py report \
   --week 2026-02-04 \
-  --search-terms "data/raw/Sponsored_Products_Search_term_report (1).xlsx" \
   --search-terms "data/raw/Sponsored_Products_Search_term_report.xlsx" \
+  --search-terms "data/raw/Sponsored_Products_Search_term_report (1).xlsx" \
   --kdp "data/raw/KDP_Dashboard-*.xlsx" \
   --save
 
@@ -122,13 +125,9 @@ python analyze.py lifetime
 
 ## Weekly Export Workflow
 
-Each week, pull these 3 exports and place them in `data/raw/`:
+See [weekly-update-workflow.md](weekly-update-workflow.md) for the full step-by-step process.
 
-1. **Amazon Ads → Search Term Report** (XLSX): Advertising console → Reports → Search term. May need to pull multiple files for different date ranges.
-2. **KDP Dashboard Report** (XLSX): KDP Dashboard → select "This Month" → Download. This gives daily granularity for all formats in the Combined Sales sheet.
-3. **Amazon Ads → Campaign Report** (CSV, optional): Campaign-level summary for reference.
-
-The KDP Dashboard "This Month" report is preferred over the Orders/Lifetime report for weekly analysis because it provides **daily** dates for paperback sales (not just monthly). The lifetime report (`KDP_Orders-*.xlsx`) is kept in `data/raw/` for historical context and ad-influenced analysis across the full ad period.
+Summary: Download fresh Amazon Ads Search Term Report(s) and KDP Dashboard Report ("This Month"), move them into `data/raw/`, delete old exports, then run `bash run-report.sh YYYY-MM-DD --save`.
 
 ## Architecture
 
