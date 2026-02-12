@@ -137,6 +137,22 @@ def render_asin_performance(result: dict) -> None:
         )
 
     console.print(table)
+
+    # Zero-activity targets (configured but absent from search term data)
+    zero_activity = result.get("zero_activity_targets", [])
+    if zero_activity:
+        za_table = Table(
+            title="Targets with Zero Activity This Week",
+            show_lines=True,
+            style="dim",
+        )
+        za_table.add_column("ASIN", style="yellow")
+        za_table.add_column("Title", style="yellow")
+        za_table.add_column("Configured Bid", justify="right", style="yellow")
+        for t in zero_activity:
+            za_table.add_row(t["asin"], t["title"], _fmt_dollar(t["bid"]))
+        console.print(za_table)
+
     console.print()
 
 

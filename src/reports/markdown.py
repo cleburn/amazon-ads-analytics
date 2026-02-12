@@ -89,6 +89,15 @@ def _asin_performance_section(result: dict) -> str:
             icon = "!!!" if f["severity"] == "warning" else ">"
             section += f"- {icon} {f['message']}\n"
 
+    zero_activity = result.get("zero_activity_targets", [])
+    if zero_activity:
+        section += "\n### Targets with Zero Activity\n\n"
+        za_headers = ["ASIN", "Title", "Bid"]
+        za_rows = []
+        for t in zero_activity:
+            za_rows.append([t["asin"], t["title"], _fmt_dollar(t["bid"])])
+        section += _md_table(za_headers, za_rows) + "\n"
+
     return section
 
 
