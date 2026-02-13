@@ -68,7 +68,7 @@ def render_campaign_summary(result: dict) -> None:
             orders_str += _delta_str(row["orders_delta"], _fmt_int)
 
         roas_val = row.get("roas")
-        roas_str = f"{roas_val:.2f}x" if roas_val and pd.notna(roas_val) else "—"
+        roas_str = f"{roas_val:.2f}x" if roas_val is not None and pd.notna(roas_val) else "—"
 
         table.add_row(
             row["campaign_name"],
@@ -316,8 +316,8 @@ def render_kdp_reconciliation(result: dict) -> None:
 
         attr_roas = inf.get("attributed_roas")
         inf_roas = inf.get("influenced_roas")
-        inf_text += f"  Amazon-Attributed ROAS:  {f'{attr_roas:.2f}x' if attr_roas else '—'}\n"
-        inf_text += f"  Ad-Influenced ROAS:      {f'{inf_roas:.2f}x' if inf_roas else '—'}"
+        inf_text += f"  Amazon-Attributed ROAS:  {f'{attr_roas:.2f}x' if attr_roas is not None else '—'}\n"
+        inf_text += f"  Ad-Influenced ROAS:      {f'{inf_roas:.2f}x' if inf_roas is not None else '—'}"
         inf_text += "  [dim](KDP royalty / ad spend)[/dim]\n"
 
         # Post-ad breakdown

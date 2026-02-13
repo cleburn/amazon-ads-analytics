@@ -41,7 +41,7 @@ def _campaign_summary_section(result: dict) -> str:
     rows = []
     for _, row in df.iterrows():
         roas_val = row.get("roas")
-        roas_str = f"{roas_val:.2f}x" if roas_val and pd.notna(roas_val) else "—"
+        roas_str = f"{roas_val:.2f}x" if roas_val is not None and pd.notna(roas_val) else "—"
         rows.append([
             row["campaign_name"],
             _fmt_dollar(row["spend"]),
@@ -225,8 +225,8 @@ def _kdp_section(result: dict) -> str:
 
         attr_roas = inf.get("attributed_roas")
         inf_roas = inf.get("influenced_roas")
-        section += f"- **Amazon-Attributed ROAS**: {f'{attr_roas:.2f}x' if attr_roas else '—'}\n"
-        section += f"- **Ad-Influenced ROAS**: {f'{inf_roas:.2f}x' if inf_roas else '—'} (KDP royalty / ad spend)\n"
+        section += f"- **Amazon-Attributed ROAS**: {f'{attr_roas:.2f}x' if attr_roas is not None else '—'}\n"
+        section += f"- **Ad-Influenced ROAS**: {f'{inf_roas:.2f}x' if inf_roas is not None else '—'} (KDP royalty / ad spend)\n"
 
         breakdown = inf.get("post_ad_breakdown", [])
         if breakdown:

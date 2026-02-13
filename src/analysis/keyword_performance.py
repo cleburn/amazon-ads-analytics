@@ -20,6 +20,9 @@ def analyze_keywords(
             - table: DataFrame with per-keyword metrics
             - flags: list of flag dicts
     """
+    if targeting_df.empty or "campaign_name" not in targeting_df.columns:
+        return {"table": pd.DataFrame(), "flags": []}
+
     settings = config.get("settings", {})
     high_spend_threshold = settings.get("high_spend_flag", 5.0)
 

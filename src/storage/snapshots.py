@@ -16,6 +16,7 @@ def save_weekly_snapshot(
     kdp_df: pd.DataFrame,
     campaign_summary: dict,
     bid_recommendations: dict,
+    drift_flags: list = None,
     db_path: str = None,
     notes: str = None,
 ) -> int:
@@ -122,11 +123,21 @@ def save_weekly_snapshot(
             )
 
         # Save search term metrics
-        drift_targets = set()
-        # We don't have drift_flags here directly, so mark all as non-drift
-        # Drift detection is in the analysis layer
+        # Build drift lookup from analysis-layer drift flags
+        drift_keys = set()
+        for flag in (drift_flags or []):
+            drift_keys.add((
+                flag.get("campaign", ""),
+                flag.get("targeting", ""),
+                flag.get("search_term", ""),
+            ))
 
         for _, row in search_term_df.iterrows():
+            campaign = row.get("campaign_name", "")
+            targeting = row.get("targeting", "")
+            search_term = row.get("search_term", "")
+            is_drift = 1 if (campaign, targeting, search_term) in drift_keys else 0
+
             cursor.execute(
                 """INSERT INTO search_term_metrics
                    (snapshot_id, campaign_name, targeting, search_term, match_type,
@@ -134,16 +145,16 @@ def save_weekly_snapshot(
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     snapshot_id,
-                    row.get("campaign_name", ""),
-                    row.get("targeting", ""),
-                    row.get("search_term", ""),
+                    campaign,
+                    targeting,
+                    search_term,
                     row.get("match_type", ""),
                     int(row.get("impressions", 0)),
                     int(row.get("clicks", 0)),
                     float(row.get("spend", 0)),
                     float(row.get("sales", 0)),
                     int(row.get("orders", 0)),
-                    0,
+                    is_drift,
                 ),
             )
 

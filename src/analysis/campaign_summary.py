@@ -20,6 +20,9 @@ def generate_campaign_summary(
             - table: DataFrame with campaign-level metrics
             - wow_available: bool
     """
+    if targeting_df.empty or "campaign_name" not in targeting_df.columns:
+        return {"table": pd.DataFrame(), "wow_available": False}
+
     grouped = targeting_df.groupby("campaign_name").agg(
         impressions=("impressions", "sum"),
         clicks=("clicks", "sum"),

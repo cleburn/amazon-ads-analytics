@@ -22,6 +22,9 @@ def analyze_asin_targets(
             - table: DataFrame with per-target metrics
             - flags: list of flag dicts
     """
+    if targeting_df.empty or "campaign_name" not in targeting_df.columns:
+        return {"table": pd.DataFrame(), "flags": [], "zero_activity_targets": []}
+
     settings = config.get("settings", {})
     high_spend_threshold = settings.get("high_spend_flag", 5.0)
     low_impressions_threshold = settings.get("low_impressions_flag", 10)

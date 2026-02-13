@@ -5,10 +5,11 @@ import sys
 from datetime import datetime, timedelta
 
 import click
+import pandas as pd
 import yaml
 
 from src.ingest.search_terms import load_search_term_report
-from src.ingest.targeting import load_campaign_report, build_targeting_from_search_terms
+from src.ingest.targeting import build_targeting_from_search_terms
 from src.ingest.kdp import load_kdp_report, load_kdp_orders
 from src.analysis.campaign_summary import generate_campaign_summary
 from src.analysis.asin_performance import analyze_asin_targets
@@ -70,7 +71,6 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
     click.echo(f"Loading data for week of {week}...")
 
     # Ingest search term reports (may be multiple files for different date ranges)
-    import pandas as pd
     search_term_frames = []
     for path in search_terms_paths:
         df = load_search_term_report(path)
@@ -78,6 +78,19 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
         click.echo(f"  Search terms ({os.path.basename(path)}): {len(df)} rows")
 
     search_term_df = pd.concat(search_term_frames, ignore_index=True) if search_term_frames else pd.DataFrame()
+
+    # Deduplicate overlapping exports (same row from multiple files)
+    if not search_term_df.empty:
+        dedup_cols = ["campaign_name", "targeting", "search_term"]
+        for col in ["start_date", "end_date"]:
+            if col in search_term_df.columns:
+                dedup_cols.append(col)
+        before = len(search_term_df)
+        search_term_df = search_term_df.drop_duplicates(subset=dedup_cols, keep="first")
+        dupes = before - len(search_term_df)
+        if dupes:
+            click.echo(f"  Deduplicated: removed {dupes} overlapping rows")
+
     click.echo(f"  Search terms total: {len(search_term_df)} rows")
 
     # Build per-target data by aggregating search terms
@@ -92,11 +105,6 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
             target_bids[target["asin"]] = target.get("bid")
     if not targeting_df.empty:
         targeting_df["bid"] = targeting_df["targeting"].map(target_bids)
-
-    # Load campaign report if provided (for reference/validation)
-    if campaign_path:
-        campaign_report = load_campaign_report(campaign_path)
-        click.echo(f"  Campaign report: {len(campaign_report)} campaigns")
 
     # KDP sales
     kdp_df = load_kdp_report(kdp_path)
@@ -180,6 +188,7 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
                 kdp_df=kdp_df,
                 campaign_summary=campaign_summary,
                 bid_recommendations=bid_recs,
+                drift_flags=search_term_analysis.get("drift_flags", []),
             )
             click.echo("Snapshot saved to database.")
         except ImportError:
@@ -222,12 +231,14 @@ def trends(metric, campaign, weeks):
             for col in data.columns:
                 if col != "week_start":
                     val = row[col]
-                    if metric in ("ctr", "acos"):
-                        values.append(f"{val * 100:.2f}%" if val else "—")
+                    if val is None or pd.isna(val):
+                        values.append("—")
+                    elif metric in ("ctr", "acos"):
+                        values.append(f"{val * 100:.2f}%")
                     elif metric in ("spend",):
-                        values.append(f"${val:.2f}" if val else "—")
+                        values.append(f"${val:.2f}")
                     else:
-                        values.append(str(int(val)) if val else "—")
+                        values.append(str(int(val)))
             table.add_row(*values)
 
         console.print(table)
