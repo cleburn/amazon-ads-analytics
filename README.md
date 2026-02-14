@@ -2,7 +2,7 @@
 
 CLI tool for analyzing Amazon Sponsored Products campaigns. Ingests Amazon Ads XLSX exports and KDP sales data, produces weekly performance reports with actionable flags and bid recommendations. Stores historical data in SQLite for trend analysis.
 
-Built to manage ad campaigns for [Ascension: Knowing God in You](https://www.amazon.com/dp/B0CW1BMHMZ), a 2-book spiritual/consciousness series.
+Built to manage ad campaigns for [Ascension: Knowing God in You](https://a.co/d/043lKRSd), a 2-book spiritual/consciousness series.
 
 ## What It Does
 
