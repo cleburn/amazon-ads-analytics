@@ -106,11 +106,14 @@ conda activate ascension-ads
 pip install -r requirements.txt
 
 # Weekly report (wrapper script handles conda + file discovery)
-bash run-report.sh 2026-02-04 --save
+# --week is the PULL DATE (the day you export data).
+# The report covers the 7 days before it: pull_date-7 to pull_date-1.
+# Example: 2026-02-16 → reports on Feb 9–15
+bash run-report.sh 2026-02-16 --save
 
 # Or run directly (supports multiple search term files)
 python analyze.py report \
-  --week 2026-02-04 \
+  --week 2026-02-16 \
   --search-terms "data/raw/Sponsored_Products_Search_term_report.xlsx" \
   --search-terms "data/raw/Sponsored_Products_Search_term_report (1).xlsx" \
   --kdp "data/raw/KDP_Dashboard-*.xlsx" \
@@ -127,7 +130,7 @@ python analyze.py lifetime
 
 See [weekly-update-workflow.md](weekly-update-workflow.md) for the full step-by-step process.
 
-Summary: Download fresh Amazon Ads Search Term Report(s) and KDP Dashboard Report ("This Month"), move them into `data/raw/`, delete old exports, then run `bash run-report.sh YYYY-MM-DD --save`.
+Summary: Download fresh Amazon Ads Search Term Report(s) and KDP Dashboard Report ("This Month"), move them into `data/raw/`, delete old exports, then run `bash run-report.sh <pull-date> --save` where `<pull-date>` is today's date (the report looks back 7 days from it).
 
 ## Architecture
 
@@ -170,6 +173,7 @@ src/models/             Phase 3 placeholder (Bayesian bid optimizer — not yet 
 - **Drift flag persistence**: `save_weekly_snapshot` accepts `drift_flags` from search term analysis and marks matching rows with `is_drift=1` in the `search_term_metrics` table.
 - **Column naming**: Internally uses `orders` and `sales` (not `orders_7d`/`sales_7d`) since attribution window varies (14-day in current exports).
 - **ASIN-to-title resolution**: Search terms that are ASINs (B0xx or 10-digit ISBNs) are resolved to book titles via `data/asin_lookup.json`. Unknown ASINs are scraped from Amazon product pages and cached to the JSON file. Controlled by `--resolve-asins/--no-resolve-asins` flag (on by default).
+- **Pull-date convention**: `--week` is the pull date (day you export data). The report looks back 7 days: `week_start = pull_date - 7`, `week_end = pull_date - 1`. The pull date is used for filenames and display titles; the lookback window is passed to KDP reconciliation and snapshot storage.
 
 ## Key Metrics & Formulas
 

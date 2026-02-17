@@ -33,10 +33,10 @@ From Terminal, `cd` into the project folder and run:
 
 ```
 cd ~/repos/amazon-ads-analytics
-bash run-report.sh 2026-02-11 --save
+bash run-report.sh 2026-02-16 --save
 ```
 
-Replace `2026-02-11` with the Monday of the week you're reporting on.
+Replace `2026-02-16` with today's date (the pull date). The report automatically covers the 7 days before it (e.g., `2026-02-16` → reports on Feb 9–15).
 
 - The script auto-discovers your search term and KDP files in `data/raw/`
 - `--save` stores the snapshot in SQLite for trend tracking (optional but recommended)
