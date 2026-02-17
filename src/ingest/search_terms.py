@@ -50,26 +50,25 @@ def _find_header_row(filepath: str, max_rows: int = 10) -> int:
 
 def _clean_percentage(series: pd.Series) -> pd.Series:
     """Convert percentage strings like '2.50%' to float 0.025."""
-    return (
+    cleaned = (
         series.astype(str)
         .str.replace("%", "", regex=False)
         .str.strip()
         .replace("", "0")
-        .astype(float)
-        / 100
     )
+    return pd.to_numeric(cleaned, errors="coerce").fillna(0.0) / 100
 
 
 def _clean_currency(series: pd.Series) -> pd.Series:
     """Convert currency strings like '$0.72' to float 0.72."""
-    return (
+    cleaned = (
         series.astype(str)
         .str.replace("$", "", regex=False)
         .str.replace(",", "", regex=False)
         .str.strip()
         .replace("", "0")
-        .astype(float)
     )
+    return pd.to_numeric(cleaned, errors="coerce").fillna(0.0)
 
 
 def _normalize_targeting(series: pd.Series) -> pd.Series:

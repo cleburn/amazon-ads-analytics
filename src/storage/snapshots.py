@@ -259,10 +259,11 @@ def get_cumulative_ad_spend(
     current_week_start: str = None,
     db_path: str = None,
 ) -> float:
-    """Get total ad spend from all saved snapshots.
+    """Get total ad spend from all saved snapshots prior to the given week.
 
-    Optionally excludes a specific week (e.g., the current week being
-    analyzed, whose data hasn't been saved yet or will be replaced).
+    Only includes weeks strictly before current_week_start, so that
+    cumulative spend reflects history up to (but not including) the
+    week currently being analyzed.
     """
     conn = get_connection(db_path)
 
@@ -272,7 +273,7 @@ def get_cumulative_ad_spend(
                 """SELECT COALESCE(SUM(cm.spend), 0) as total_spend
                    FROM campaign_metrics cm
                    JOIN weekly_snapshots ws ON cm.snapshot_id = ws.id
-                   WHERE ws.week_start != ?""",
+                   WHERE ws.week_start < ?""",
                 (current_week_start,),
             ).fetchone()
         else:

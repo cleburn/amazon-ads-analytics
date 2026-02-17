@@ -23,15 +23,14 @@ import pandas as pd
 
 
 def _clean_currency(series: pd.Series) -> pd.Series:
-    return (
+    cleaned = (
         series.astype(str)
         .str.replace("$", "", regex=False)
         .str.replace(",", "", regex=False)
         .str.strip()
         .replace("", "0")
-        .replace("nan", "0")
-        .astype(float)
     )
+    return pd.to_numeric(cleaned, errors="coerce").fillna(0.0)
 
 
 def _infer_format(transaction_type: str) -> str:

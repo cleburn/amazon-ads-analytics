@@ -65,7 +65,7 @@ def analyze_search_terms(
             - summary: DataFrame with search term rollup
     """
     settings = config.get("settings", {})
-    transition_date = settings.get("exact_match_transition_date", "2025-02-10")
+    transition_date = settings.get("exact_match_transition_date")
 
     df = search_term_df.copy()
 
@@ -139,12 +139,16 @@ def analyze_search_terms(
         .reset_index()
     )
 
+    transition_note = ""
+    if transition_date:
+        transition_note = (
+            f"Note: Switched from expanded to exact ASIN matching on {transition_date}. "
+            "Drift before this date may reflect expanded match behavior."
+        )
+
     return {
         "grouped": grouped,
         "drift_flags": drift_flags,
         "summary": summary,
-        "transition_note": (
-            f"Note: Switched from expanded to exact ASIN matching on {transition_date}. "
-            "Drift before this date may reflect expanded match behavior."
-        ),
+        "transition_note": transition_note,
     }

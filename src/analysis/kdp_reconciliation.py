@@ -268,7 +268,7 @@ def _detect_paired_purchases(
     # this is likely a monthly report. Individual rows on the 1st are
     # fine when other daily dates are present.
     dates = df["date"].dropna()
-    if not dates.empty and (dates.dt.day == 1).all() and dates.nunique() > 1:
+    if not dates.empty and (dates.dt.day == 1).all():
         return []
 
     paired = []
