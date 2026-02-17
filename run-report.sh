@@ -27,7 +27,7 @@ for f in data/raw/Sponsored_Products_Search_term_report*.xlsx; do
 done
 
 KDP_FILE=""
-for f in data/raw/KDP_Dashboard-*.xlsx; do
+for f in data/raw/KDP_Dash*.xlsx; do
     [ -f "$f" ] && KDP_FILE="$f"
 done
 

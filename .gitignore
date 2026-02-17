@@ -1,8 +1,10 @@
 # --- Data files ---
 data/raw/*
 data/processed/*
+data/archive/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/archive/.gitkeep
 
 # Safety net — no XLSX/CSV data committed accidentally
 *.xlsx
