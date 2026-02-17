@@ -24,17 +24,23 @@ Understanding this timeline is critical for interpreting all data:
 4. **Late Jan 2026**: Book 2 reaches 3 Amazon reviews — minimum threshold to start ads
 5. **Jan 26, 2026**: Amazon Sponsored Products campaigns go live ($15/day total budget)
 6. **Feb 3, 2026**: Self-targeting campaign added (Book 1 pages → Book 2)
+7. **Feb 16, 2026**: Major campaign restructure — paused underperforming ASIN/keyword targets, added Deconstruction Targeting campaign, raised budgets to $40/day total
 
 Pre-ad sales are entirely organic/email-driven. Any KDP sales before Jan 26, 2026 have zero ad attribution.
 
 ## Campaign Structure
 
-3 campaigns at $15/day total:
-- **ASIN Targeting** ($8/day): 12 competitor book ASINs (spiritual/consciousness genre). Expanded match. The Sophia Code paperback dominates impressions (~70-80%)
-- **Keyword Targeting** ($5/day): 28 broad-match keywords. Low impressions, early data
-- **Self Targeting** ($2/day): Book 1 product pages → Book 2. Currently zero impressions — this is expected behavior, not a bug
+4 campaigns at $40/day total (restructured Feb 16, 2026):
+- **ASIN Targeting** ($15/day): 8 active competitor book ASINs (Sophia Code, Power of Now, Becoming Supernatural, Four Agreements, Autobiography of a Yogi) + 8 paused underperformers. The Sophia Code paperback dominates impressions (~70-80%)
+- **Keyword Targeting** ($10/day): 29 active broad-match keywords + 7 paused. Bids range $0.13–$2.38
+- **Self Targeting** ($3/day): Book 1 product pages → Book 2. 2 exact match targets active, 2 expanded match paused. All bids $0.55
+- **Deconstruction Targeting** ($12/day): 13 competitor book ASINs in the faith deconstruction/progressive Christianity space (Richard Rohr, Rob Bell, Rachel Held Evans, Barbara Brown Taylor, Peter Enns, Cynthia Bourgeault). New campaign launched Feb 16, 2026
 
 All campaign names are prefixed "Ascension Book2 - " in Amazon's system.
+
+### Config Schema Notes
+- `campaigns.yaml` uses `targets` for active targets and `paused_targets` for paused ones. Analysis code only reads `targets`, so paused entries won't trigger false "zero activity" flags.
+- Keyword campaign uses `keywords` / `paused_keywords` lists (added Feb 16, 2026). Analysis code doesn't read these yet — keyword bids aren't enriched from config. The lists serve as a reference for manual bid management.
 
 ## Data Sources & Formats
 

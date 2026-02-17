@@ -39,67 +39,238 @@ timeline:
     list_size: 460
   book_2_3_reviews_milestone: "2026-01"
   amazon_ads_start: "2026-01-26"
+  campaign_restructure: "2026-02-16"
   # Book 1 had a sales gap from ~May 2025 to Nov 2025 (zero or near-zero sales)
   # The email campaign in Dec 2025 reactivated sales for both books
   # Ads launched once Book 2 had 3 Amazon reviews (late Jan 2026)
+  # Major restructure on 2026-02-16: paused underperformers, added deconstruction campaign
 
 campaigns:
   asin_targeting:
     name: "Ascension Book2 - ASIN Targeting"
     type: "product_targeting"
-    daily_budget: 8.00
+    daily_budget: 15.00
     match_type: "exact"
     start_date: "2026-01-26"
     targets:
       - asin: "0997935502"
         title: "The Sophia Code (Paperback)"
-        bid: 0.75
+        bid: 1.50
       - asin: "B01K1T4U5U"
         title: "The Sophia Code (Kindle)"
-        bid: 0.75
+        bid: 1.25
       - asin: "B00JW44IAI"
         title: "Autobiography of a Yogi (Kindle)"
         bid: 0.75
-      - asin: "1585427934"
-        title: "I Am the Word (Paperback)"
+      - asin: "1401953115"
+        title: "Becoming Supernatural (Paperback)"
+        bid: 0.45
+      - asin: "B0746RN3G7"
+        title: "Becoming Supernatural (Kindle)"
+        bid: 0.45
+      - asin: "1577314808"
+        title: "The Power of Now (Paperback)"
+        bid: 0.75
+      - asin: "B002361MLA"
+        title: "The Power of Now (Kindle)"
+        bid: 0.85
+      - asin: "1878424319"
+        title: "The Four Agreements (Paperback)"
         bid: 0.65
-      - asin: "B003NX7NDI"
-        title: "I Am the Word (Kindle)"
-        bid: 0.65
+    paused_targets:
+      - asin: "1401941699"
+        title: "Power vs. Force (Paperback)"
+        bid: 0.75
+        paused_date: "2026-02-16"
       - asin: "1401954901"
         title: "Mary Magdalene Revealed (Hardcover)"
         bid: 0.56
-      - asin: "B07PLK57L4"
-        title: "Mary Magdalene Revealed (Kindle)"
-        bid: 0.56
-      - asin: "1401941699"
-        title: "Power vs Force (Paperback)"
-        bid: 0.75
-      - asin: "0670869759"
-        title: "A Course in Miracles (Paperback)"
-        bid: 0.55
-      - asin: "B0018A01L4"
-        title: "A Course in Miracles (Kindle)"
-        bid: 0.55
+        paused_date: "2026-02-16"
       - asin: "1572245379"
         title: "The Untethered Soul (Paperback)"
         bid: 0.46
+        paused_date: "2026-02-16"
+      - asin: "1585427934"
+        title: "I Am the Word (Paperback)"
+        bid: 0.65
+        paused_date: "2026-02-16"
+      - asin: "B0018A01L4"
+        title: "A Course in Miracles (Kindle)"
+        bid: 0.55
+        paused_date: "2026-02-16"
+      - asin: "B003NX7NDI"
+        title: "I Am the Word (Kindle)"
+        bid: 0.65
+        paused_date: "2026-02-16"
       - asin: "B0062C5V4A"
         title: "Gospel of Thomas (Kindle)"
         bid: 0.35
+        paused_date: "2026-02-16"
+      - asin: "B07PLK57L4"
+        title: "Mary Magdalene Revealed (Kindle)"
+        bid: 0.56
+        paused_date: "2026-02-16"
 
   keyword_targeting:
     name: "Ascension Book2 - Keyword Targeting"
     type: "keyword_targeting"
-    daily_budget: 5.00
+    daily_budget: 10.00
     match_type: "broad"
     start_date: "2026-01-26"
-    note: "28 keywords, bids range $0.13-$0.61"
+    note: "36 total keywords (29 active, 7 paused). Restructured 2026-02-16."
+    keywords:
+      - keyword: "aramaic jesus"
+        bid: 0.38
+      - keyword: "biblical interpretation spiritual"
+        bid: 0.13
+      - keyword: "christ consciousness"
+        bid: 0.60
+      - keyword: "christian mysticism"
+        bid: 0.52
+      - keyword: "christian mysticism books"
+        bid: 0.61
+      - keyword: "consciousness and christianity"
+        bid: 0.36
+      - keyword: "contemplative christianity"
+        bid: 0.15
+      - keyword: "cosmic christ"
+        bid: 0.45
+      - keyword: "cosmic consciousness"
+        bid: 0.62
+      - keyword: "course miracles"
+        bid: 1.51
+      - keyword: "david hawkins"
+        bid: 0.24
+      - keyword: "david hawkins books"
+        bid: 0.24
+      - keyword: "david r hawkins"
+        bid: 0.62
+      - keyword: "deconstructing faith"
+        bid: 0.51
+      - keyword: "ernest holmes"
+        bid: 0.27
+      - keyword: "esoteric christianity"
+        bid: 0.36
+      - keyword: "faith deconstruction"
+        bid: 1.09
+      - keyword: "gnostic books"
+        bid: 0.22
+      - keyword: "i am presence"
+        bid: 0.97
+      - keyword: "leaving church book"
+        bid: 0.15
+      - keyword: "mary magdalene"
+        bid: 1.46
+      - keyword: "metaphysical bible"
+        bid: 0.51
+      - keyword: "mystical christianity"
+        bid: 0.21
+      - keyword: "neville goddard bible"
+        bid: 0.60
+      - keyword: "progressive christianity books"
+        bid: 1.81
+      - keyword: "sophia code"
+        bid: 1.22
+      - keyword: "spiritual awakening book"
+        bid: 2.38
+      - keyword: "spiritual but not religious"
+        bid: 1.88
+      - keyword: "teachings of yeshua"
+        bid: 0.27
+    paused_keywords:
+      - keyword: "foundation inner peace"
+        bid: 0.15
+        paused_date: "2026-02-16"
+      - keyword: "gary renard books"
+        bid: 0.21
+        paused_date: "2026-02-16"
+      - keyword: "gregg braden books"
+        bid: 0.24
+        paused_date: "2026-02-16"
+      - keyword: "helen schucman"
+        bid: 0.40
+        paused_date: "2026-02-16"
+      - keyword: "knowing god"
+        bid: 0.40
+        paused_date: "2026-02-16"
+      - keyword: "neale donald walsch"
+        bid: 0.52
+        paused_date: "2026-02-16"
+      - keyword: "wayne dyer"
+        bid: 0.29
+        paused_date: "2026-02-16"
 
   self_targeting:
     name: "Ascension Book2 - Self Targeting"
     type: "product_targeting"
-    daily_budget: 2.00
+    daily_budget: 3.00
     match_type: "exact"
     start_date: "2026-02-03"
-    note: "Book 1 pages targeting Book 2. Currently getting zero impressions."
+    note: "Book 1 pages targeting Book 2. Raised budget ($2→$3) and bids to $0.55. Expanded match variants paused."
+    targets:
+      - asin: "B0CW1BMHMZ"
+        title: "Ascension Book 1 (Kindle) → Book 2"
+        bid: 0.55
+        match_type: "exact"
+      - asin: "B0CY8YG9Q1"
+        title: "Ascension Book 1 (Paperback) → Book 2"
+        bid: 0.55
+        match_type: "exact"
+    paused_targets:
+      - asin: "B0CW1BMHMZ"
+        title: "Ascension Book 1 (Kindle) → Book 2 (Expanded)"
+        bid: 0.55
+        match_type: "expanded"
+        paused_date: "2026-02-16"
+      - asin: "B0CY8YG9Q1"
+        title: "Ascension Book 1 (Paperback) → Book 2 (Expanded)"
+        bid: 0.55
+        match_type: "expanded"
+        paused_date: "2026-02-16"
+
+  deconstruction_targeting:
+    name: "Ascension Book2 - Deconstruction Targeting"
+    type: "product_targeting"
+    daily_budget: 12.00
+    match_type: "exact"
+    start_date: "2026-02-16"
+    targets:
+      - asin: "059323832X"
+        title: "The Universal Christ by Richard Rohr (Paperback)"
+        bid: 0.39
+      - asin: "B07B77R8T7"
+        title: "The Universal Christ by Richard Rohr (Kindle)"
+        bid: 0.47
+      - asin: "0470907754"
+        title: "Falling Upward by Richard Rohr (Hardcover)"
+        bid: 0.62
+      - asin: "1590305809"
+        title: "The Wisdom Jesus by Cynthia Bourgeault (Paperback)"
+        bid: 0.88
+      - asin: "B005DXOM62"
+        title: "The Wisdom Jesus by Cynthia Bourgeault (Kindle)"
+        bid: 0.50
+      - asin: "0062049658"
+        title: "Love Wins by Rob Bell (Paperback)"
+        bid: 0.93
+      - asin: "0718022122"
+        title: "Searching for Sunday by Rachel Held Evans (Paperback)"
+        bid: 1.03
+      - asin: "B00PWOH2CI"
+        title: "Searching for Sunday by Rachel Held Evans (Kindle)"
+        bid: 0.53
+      - asin: "0062272098"
+        title: "The Sin of Certainty by Peter Enns (Paperback)"
+        bid: 1.03
+      - asin: "B00XHQA8P6"
+        title: "The Sin of Certainty by Peter Enns (Kindle)"
+        bid: 1.15
+      - asin: "0061370479"
+        title: "An Altar in the World by Barbara Brown Taylor (Paperback)"
+        bid: 0.34
+      - asin: "B001NLKXU2"
+        title: "An Altar in the World by Barbara Brown Taylor (Kindle)"
+        bid: 0.65
+      - asin: "0060872632"
+        title: "Leaving Church by Barbara Brown Taylor (Paperback)"
+        bid: 0.91
