@@ -14,10 +14,11 @@ Built to manage ad campaigns for [Ascension: Knowing God in You](https://a.co/d/
 
 ## Campaign Structure
 
-3 Amazon Sponsored Products campaigns ($15/day total):
-- **ASIN Targeting** ($8/day) — 12 competitor book ASINs in the spiritual/consciousness genre
-- **Keyword Targeting** ($5/day) — 28 broad-match keywords
-- **Self Targeting** ($2/day) — Book 1 product pages → Book 2
+4 Amazon Sponsored Products campaigns ($40/day total, restructured Feb 16, 2026):
+- **ASIN Targeting** ($15/day) — 8 active, 8 paused targets
+- **Keyword Targeting** ($10/day) — 29 active, 7 paused keywords
+- **Self Targeting** ($3/day) — 2 active, 2 paused targets
+- **Deconstruction Targeting** ($12/day) — 13 active targets
 
 ## Quick Start
 
