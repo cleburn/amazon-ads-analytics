@@ -83,7 +83,7 @@ def _load_xlsx_workbook(filepath: str) -> pd.DataFrame:
                 # Dashboard report — Combined Sales has daily data for all formats
                 if "marketplace" in combined_df.columns:
                     combined_df = combined_df[
-                        combined_df["marketplace"].str.contains("Amazon.com", na=False)
+                        combined_df["marketplace"].eq("Amazon.com")
                     ].copy()
                 return combined_df
 
@@ -112,7 +112,7 @@ def _load_xlsx_workbook(filepath: str) -> pd.DataFrame:
     df = pd.concat(frames, ignore_index=True)
 
     if "marketplace" in df.columns:
-        df = df[df["marketplace"].str.contains("Amazon.com", na=False)].copy()
+        df = df[df["marketplace"].eq("Amazon.com")].copy()
 
     return df
 
@@ -257,7 +257,7 @@ def load_kdp_orders(filepath: str) -> pd.DataFrame:
         df["format"] = "ebook"
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
         if "marketplace" in df.columns:
-            df = df[df["marketplace"].str.contains("Amazon.com", na=False)].copy()
+            df = df[df["marketplace"].eq("Amazon.com")].copy()
         frames.append(df)
 
     if "Orders Processed" in xls.sheet_names:
@@ -281,7 +281,7 @@ def load_kdp_orders(filepath: str) -> pd.DataFrame:
         else:
             df["format"] = "paperback"
         if "marketplace" in df.columns:
-            df = df[df["marketplace"].str.contains("Amazon.com", na=False)].copy()
+            df = df[df["marketplace"].eq("Amazon.com")].copy()
         frames.append(df)
 
     if not frames:
@@ -340,6 +340,6 @@ def _load_csv(filepath: str) -> pd.DataFrame:
         )
 
     if "marketplace" in df.columns:
-        df = df[df["marketplace"].str.contains("Amazon.com", na=False)].copy()
+        df = df[df["marketplace"].eq("Amazon.com")].copy()
 
     return df

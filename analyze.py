@@ -122,9 +122,21 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
     if save:
         try:
             from src.storage.snapshots import get_prior_week_summary
-            prior_week_df = get_prior_week_summary(week)
-        except Exception:
+            prior_week_df = get_prior_week_summary(week_start_str)
+        except ImportError:
             pass
+        except Exception as e:
+            click.echo(f"  Warning: Could not load prior week for WoW comparison: {e}")
+
+    # Try to load cumulative ad spend from prior snapshots (for ad-influenced ROAS)
+    cumulative_prior_spend = None
+    try:
+        from src.storage.snapshots import get_cumulative_ad_spend
+        cumulative_prior_spend = get_cumulative_ad_spend(current_week_start=week_start_str)
+    except ImportError:
+        pass
+    except Exception as e:
+        click.echo(f"  Warning: Could not load cumulative ad spend: {e}")
 
     # Analysis
     click.echo("Running analysis...")
@@ -135,6 +147,7 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
     kdp_recon = reconcile_kdp_sales(
         kdp_df, campaign_summary, week_start_str, week_end_str,
         kdp_orders_df=kdp_orders_df, config=config,
+        cumulative_prior_spend=cumulative_prior_spend,
     )
     bid_recs = recommend_bids(targeting_df, config)
 
@@ -243,6 +256,8 @@ def trends(metric, campaign, weeks):
                         values.append(f"{val * 100:.2f}%")
                     elif metric in ("spend",):
                         values.append(f"${val:.2f}")
+                    elif metric in ("roas",):
+                        values.append(f"{val:.2f}x")
                     else:
                         values.append(str(int(val)))
             table.add_row(*values)

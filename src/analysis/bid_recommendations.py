@@ -24,6 +24,9 @@ def recommend_bids(
     target_acos = settings.get("target_acos", 0.50)
     blended_royalty = settings.get("blended_royalty", 5.00)
 
+    if target_acos <= 0:
+        target_acos = 0.50
+
     df = targeting_df.copy()
 
     if df.empty:

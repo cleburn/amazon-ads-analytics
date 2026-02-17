@@ -10,6 +10,7 @@ def reconcile_kdp_sales(
     week_end: str,
     kdp_orders_df: pd.DataFrame = None,
     config: dict = None,
+    cumulative_prior_spend: float = None,
 ) -> dict:
     """Reconcile KDP sales data against Amazon ad-attributed orders.
 
@@ -148,7 +149,9 @@ def reconcile_kdp_sales(
         )
 
     # --- Paired purchase detection ---
-    paired_purchases = _detect_paired_purchases(kdp_orders_df, config)
+    paired_purchases = _detect_paired_purchases(
+        kdp_orders_df, config, week_start=week_start, week_end=week_end,
+    )
 
     # --- Ad-influenced analysis ---
     ad_influenced = _estimate_ad_influenced(
@@ -158,6 +161,7 @@ def reconcile_kdp_sales(
         total_ad_spend=total_ad_spend,
         total_ad_orders=total_ad_orders,
         total_ad_sales=total_ad_sales,
+        cumulative_prior_spend=cumulative_prior_spend,
     )
 
     # --- Build the comparison note ---
@@ -210,12 +214,20 @@ def reconcile_kdp_sales(
 def _detect_paired_purchases(
     kdp_orders_df: pd.DataFrame,
     config: dict,
+    week_start: str = None,
+    week_end: str = None,
 ) -> list:
     """Detect same-day purchases of both Book 1 and Book 2.
 
     Uses the eBook Orders Placed data (daily granularity) to find dates
     where both books were ordered — a strong signal of ad-driven behavior
     since the ads target Book 2 and the buyer also grabs Book 1.
+
+    Args:
+        kdp_orders_df: Daily order data from load_kdp_orders().
+        config: Campaign config dict with book ASINs.
+        week_start: Start of report window (YYYY-MM-DD). Filters results.
+        week_end: End of report window (YYYY-MM-DD). Filters results.
 
     Returns a list of dicts with date and details for each paired purchase.
     """
@@ -240,20 +252,23 @@ def _detect_paired_purchases(
     if "date" not in df.columns or "asin" not in df.columns:
         return []
 
-    # Only look at rows with daily dates (not monthly)
     df = df.dropna(subset=["date"])
     if df.empty:
         return []
 
-    # Filter to rows that are actually daily (not first-of-month monthly)
-    daily_mask = ~((df["date"].dt.day == 1) & (df["date"].dt.is_month_start))
-    # If all dates are 1st, they might still be daily — check if there are different days
-    if not daily_mask.any():
-        daily_mask = pd.Series(True, index=df.index)
-    df = df[daily_mask].copy()
+    # Filter to the report's date window
+    if week_start and week_end:
+        ws = pd.to_datetime(week_start)
+        we = pd.to_datetime(week_end)
+        df = df[(df["date"] >= ws) & (df["date"] <= we)].copy()
+        if df.empty:
+            return []
 
-    # Check for daily dates only (skip monthly-granularity data)
-    if df.empty:
+    # Skip monthly-granularity rows: if ALL dates are 1st-of-month,
+    # this is likely a monthly report. Individual rows on the 1st are
+    # fine when other daily dates are present.
+    dates = df["date"].dropna()
+    if not dates.empty and (dates.dt.day == 1).all() and dates.nunique() > 1:
         return []
 
     paired = []
@@ -287,6 +302,7 @@ def _estimate_ad_influenced(
     total_ad_spend: float,
     total_ad_orders: int,
     total_ad_sales: float,
+    cumulative_prior_spend: float = None,
 ) -> dict:
     """Estimate total ad-influenced sales across all books and formats.
 
@@ -362,10 +378,19 @@ def _estimate_ad_influenced(
                 post_ad_ebook_units = int(orders_post["paid_units"].sum())
 
     # --- Calculate influenced ROAS ---
-    influenced_roas = None
-    if total_ad_spend > 0 and post_ad_royalty > 0:
-        influenced_roas = post_ad_royalty / total_ad_spend
+    # Use cumulative spend (prior snapshots + current week) to match the
+    # cumulative royalty numerator. Falls back to current week only when
+    # no prior snapshot data is available.
+    if cumulative_prior_spend is not None:
+        cumulative_spend = cumulative_prior_spend + total_ad_spend
+    else:
+        cumulative_spend = total_ad_spend
 
+    influenced_roas = None
+    if cumulative_spend > 0 and post_ad_royalty > 0:
+        influenced_roas = post_ad_royalty / cumulative_spend
+
+    # Attributed ROAS stays week-scoped (current week's attributed sales / spend)
     attributed_roas = None
     if total_ad_spend > 0 and total_ad_sales > 0:
         attributed_roas = total_ad_sales / total_ad_spend
@@ -392,7 +417,8 @@ def _estimate_ad_influenced(
         "post_ad_breakdown": post_ad_breakdown,
         "pre_ad_units": pre_ad_units,
         "pre_ad_royalty": pre_ad_royalty,
-        "ad_spend": total_ad_spend,
+        "ad_spend": cumulative_spend,
+        "ad_spend_this_week": total_ad_spend,
         "ad_attributed_orders": total_ad_orders,
         "ad_attributed_sales": total_ad_sales,
         "attributed_roas": attributed_roas,

@@ -162,8 +162,9 @@ def save_weekly_snapshot(
         units_col = "net_units_sold" if "net_units_sold" in kdp_df.columns else "units_sold"
         kdp_filtered = kdp_df.copy()
         if not kdp_filtered.empty and "date" in kdp_filtered.columns:
+            kdp_filtered = kdp_filtered.dropna(subset=["date"])
             kdp_filtered["_date_str"] = kdp_filtered["date"].apply(
-                lambda d: d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)
+                lambda d: d.strftime("%Y-%m-%d") if pd.notna(d) and hasattr(d, "strftime") else str(d)
             )
             kdp_filtered = kdp_filtered[
                 (kdp_filtered["_date_str"] >= week_start)
@@ -171,7 +172,7 @@ def save_weekly_snapshot(
             ]
         for _, row in kdp_filtered.iterrows():
             date_val = row.get("date")
-            if hasattr(date_val, "strftime"):
+            if pd.notna(date_val) and hasattr(date_val, "strftime"):
                 date_val = date_val.strftime("%Y-%m-%d")
 
             cursor.execute(
@@ -254,6 +255,37 @@ def get_prior_week_summary(
         conn.close()
 
 
+def get_cumulative_ad_spend(
+    current_week_start: str = None,
+    db_path: str = None,
+) -> float:
+    """Get total ad spend from all saved snapshots.
+
+    Optionally excludes a specific week (e.g., the current week being
+    analyzed, whose data hasn't been saved yet or will be replaced).
+    """
+    conn = get_connection(db_path)
+
+    try:
+        if current_week_start:
+            row = conn.execute(
+                """SELECT COALESCE(SUM(cm.spend), 0) as total_spend
+                   FROM campaign_metrics cm
+                   JOIN weekly_snapshots ws ON cm.snapshot_id = ws.id
+                   WHERE ws.week_start != ?""",
+                (current_week_start,),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(spend), 0) as total_spend FROM campaign_metrics"
+            ).fetchone()
+
+        return float(row["total_spend"])
+
+    finally:
+        conn.close()
+
+
 def get_trend_data(
     metric: str,
     campaign: str = None,
@@ -274,24 +306,27 @@ def get_trend_data(
     conn = get_connection(db_path)
 
     try:
+        # Use a subquery to get the N most recent weeks, then fetch all
+        # campaign rows for those weeks (avoids hardcoded campaign count)
         query = """
             SELECT ws.week_start, cm.campaign_name, cm.{metric}
             FROM campaign_metrics cm
             JOIN weekly_snapshots ws ON cm.snapshot_id = ws.id
-            {where}
+            WHERE ws.week_start IN (
+                SELECT DISTINCT week_start FROM weekly_snapshots
+                ORDER BY week_start DESC LIMIT ?
+            )
+            {extra_where}
             ORDER BY ws.week_start DESC
-            LIMIT ?
         """
 
-        where_clause = ""
-        params = []
+        extra_where = ""
+        params = [weeks]
         if campaign:
-            where_clause = "WHERE cm.campaign_name = ?"
+            extra_where = "AND cm.campaign_name = ?"
             params.append(campaign)
 
-        # Use the metric name directly — it matches column names
-        formatted_query = query.format(metric=metric, where=where_clause)
-        params.append(weeks * 3)  # multiplied because multiple campaigns per week
+        formatted_query = query.format(metric=metric, extra_where=extra_where)
 
         df = pd.read_sql_query(formatted_query, conn, params=params)
 

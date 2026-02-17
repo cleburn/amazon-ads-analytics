@@ -94,7 +94,7 @@ The tool auto-detects which report type by checking dates in Combined Sales:
 | eBook Orders Placed | DAILY | DAILY | Only ebooks, last 90 days. Used for paired purchase detection |
 | eBook Royalty | May be empty | MONTHLY | Ebook royalties |
 
-- Filter to Amazon.com marketplace (international sales exist but are separate)
+- Filter to Amazon.com marketplace using exact match (international sales on Amazon.com.au, .com.br, etc. are excluded)
 
 ### Attribution Gap & Ad-Influenced Analysis
 
@@ -172,8 +172,8 @@ src/models/             Phase 3 placeholder (Bayesian bid optimizer — not yet 
 - **Multiple search term files**: CLI accepts `--search-terms` multiple times. Files are concatenated and then deduplicated on (campaign_name, targeting, search_term, start_date, end_date) to prevent double-counting from overlapping exports.
 - **Bid enrichment from config**: Since per-target bid data isn't in the search term export, bids are mapped from `campaigns.yaml` target list.
 - **KDP auto-detection**: `load_kdp_report()` checks Combined Sales dates — daily = Dashboard report (use it directly), monthly = Lifetime report (fall back to individual royalty sheets). Format inferred from Transaction Type field.
-- **Paired purchase detection**: `_detect_paired_purchases()` uses daily eBook Orders Placed data to find same-day Book 1 + Book 2 orders — strong signal of ad-driven halo sales.
-- **Ad-influenced ROAS**: Compares total KDP royalty since ad start date against total ad spend, giving a more realistic picture than Amazon's attributed-only ROAS.
+- **Paired purchase detection**: `_detect_paired_purchases()` uses daily eBook Orders Placed data to find same-day Book 1 + Book 2 orders within the report's week window — strong signal of ad-driven halo sales.
+- **Ad-influenced ROAS**: Compares total KDP royalty since ad start date against cumulative ad spend (sourced from saved snapshots + current week). On first run without prior snapshots, falls back to current week's spend only. Requires `--save` runs to build accurate cumulative spend history.
 - **SQLite opt-in**: `--save` flag. Phase 1 works standalone without a database.
 - **Analysis modules return dicts + DataFrames**: Decoupled from rendering. All analysis modules guard against empty/missing-column inputs with early returns. Phase 3 optimizer can consume same structures.
 - **Drift flag persistence**: `save_weekly_snapshot` accepts `drift_flags` from search term analysis and marks matching rows with `is_drift=1` in the `search_term_metrics` table.
