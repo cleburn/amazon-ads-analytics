@@ -39,7 +39,7 @@ def cli():
 
 
 @cli.command()
-@click.option("--week", required=True, help="Week start date (YYYY-MM-DD)")
+@click.option("--week", required=True, help="Pull date (YYYY-MM-DD). Report covers the 7 days before this date.")
 @click.option("--search-terms", "search_terms_paths", required=True, multiple=True,
               type=click.Path(exists=True),
               help="Path to Search Term Report (CSV or XLSX). Can specify multiple.")
@@ -63,12 +63,14 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
     """Generate a weekly performance report from CSV/XLSX exports."""
     config = load_config(config_path)
 
-    # Calculate week end (7 days from start)
-    week_start = datetime.strptime(week, "%Y-%m-%d")
-    week_end = week_start + timedelta(days=6)
+    # --week is the pull date; report covers the 7 days before it
+    pull_date = datetime.strptime(week, "%Y-%m-%d")
+    week_end = pull_date - timedelta(days=1)
+    week_start = pull_date - timedelta(days=7)
+    week_start_str = week_start.strftime("%Y-%m-%d")
     week_end_str = week_end.strftime("%Y-%m-%d")
 
-    click.echo(f"Loading data for week of {week}...")
+    click.echo(f"Pull date: {week} — reporting period: {week_start_str} to {week_end_str}")
 
     # Ingest search term reports (may be multiple files for different date ranges)
     search_term_frames = []
@@ -131,7 +133,7 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
     keyword_performance = analyze_keywords(targeting_df, config)
     search_term_analysis = analyze_search_terms(search_term_df, config)
     kdp_recon = reconcile_kdp_sales(
-        kdp_df, campaign_summary, week, week_end_str,
+        kdp_df, campaign_summary, week_start_str, week_end_str,
         kdp_orders_df=kdp_orders_df, config=config,
     )
     bid_recs = recommend_bids(targeting_df, config)
@@ -161,6 +163,8 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
             search_term_analysis=search_term_analysis,
             kdp_reconciliation=kdp_recon,
             bid_recommendations=bid_recs,
+            week_start=week_start_str,
+            week_end=week_end_str,
         )
 
     # Markdown output
@@ -173,6 +177,8 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
         kdp_reconciliation=kdp_recon,
         bid_recommendations=bid_recs,
         output_dir=output_dir,
+        week_start=week_start_str,
+        week_end=week_end_str,
     )
     click.echo(f"Markdown report written to: {md_path}")
 
@@ -181,7 +187,7 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
         try:
             from src.storage.snapshots import save_weekly_snapshot
             save_weekly_snapshot(
-                week_start=week,
+                week_start=week_start_str,
                 week_end=week_end_str,
                 targeting_df=targeting_df,
                 search_term_df=search_term_df,

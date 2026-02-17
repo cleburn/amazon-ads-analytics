@@ -308,6 +308,8 @@ def write_weekly_report(
     kdp_reconciliation: dict,
     bid_recommendations: dict,
     output_dir: str = "reports",
+    week_start: str = "",
+    week_end: str = "",
 ) -> str:
     """Write the complete weekly report as a markdown file.
 
@@ -321,6 +323,10 @@ def write_weekly_report(
     # Front matter
     lines = [
         f"# Weekly Ad Report — Week of {week}",
+    ]
+    if week_start and week_end:
+        lines.append(f"**Report period**: {week_start} to {week_end}")
+    lines += [
         f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
         "",
     ]

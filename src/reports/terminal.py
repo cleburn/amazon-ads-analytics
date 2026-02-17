@@ -417,12 +417,15 @@ def render_full_report(
     search_term_analysis: dict,
     kdp_reconciliation: dict,
     bid_recommendations: dict,
+    week_start: str = "",
+    week_end: str = "",
 ) -> None:
     """Render the complete weekly report to terminal."""
     console.print()
-    console.print(
-        Panel(f"[bold]Weekly Ad Report — Week of {week}[/bold]", style="blue")
-    )
+    title = f"[bold]Weekly Ad Report — Week of {week}[/bold]"
+    if week_start and week_end:
+        title += f"\n[dim]Report period: {week_start} to {week_end}[/dim]"
+    console.print(Panel(title, style="blue"))
     console.print()
 
     render_campaign_summary(campaign_summary)

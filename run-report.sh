@@ -1,13 +1,15 @@
 #!/bin/bash
-# Usage: ./run-report.sh 2026-02-04
-#        ./run-report.sh 2026-02-04 --save
+# Usage: ./run-report.sh <pull-date> [--save]
+# The pull date is the day you export data. The report covers the 7 days before it.
+#   Example: ./run-report.sh 2026-02-16 --save  →  reports on Feb 9–15
 
 set -e
 
 WEEK="$1"
 if [ -z "$WEEK" ]; then
-    echo "Usage: ./run-report.sh YYYY-MM-DD [--save]"
-    echo "Example: ./run-report.sh 2026-02-04 --save"
+    echo "Usage: ./run-report.sh <pull-date> [--save]"
+    echo "  pull-date: the day you export data (report covers 7 days before it)"
+    echo "  Example: ./run-report.sh 2026-02-16 --save"
     exit 1
 fi
 
@@ -41,7 +43,7 @@ if [ -z "$KDP_FILE" ]; then
     exit 1
 fi
 
-echo "Week: $WEEK"
+echo "Pull date: $WEEK"
 echo "KDP:  $KDP_FILE"
 echo ""
 
