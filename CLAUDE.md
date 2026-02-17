@@ -174,6 +174,7 @@ src/models/             Phase 3 placeholder (Bayesian bid optimizer — not yet 
 - **Column naming**: Internally uses `orders` and `sales` (not `orders_7d`/`sales_7d`) since attribution window varies (14-day in current exports).
 - **ASIN-to-title resolution**: Search terms that are ASINs (B0xx or 10-digit ISBNs) are resolved to book titles via `data/asin_lookup.json`. Unknown ASINs are scraped from Amazon product pages and cached to the JSON file. Controlled by `--resolve-asins/--no-resolve-asins` flag (on by default).
 - **Pull-date convention**: `--week` is the pull date (day you export data). The report looks back 7 days: `week_start = pull_date - 7`, `week_end = pull_date - 1`. The pull date is used for filenames and display titles; the lookback window is passed to KDP reconciliation and snapshot storage.
+- **KDP date filtering in snapshots**: `save_weekly_snapshot` filters KDP rows to `[week_start, week_end]` before storing to `kdp_daily_sales`. Since KDP "This Month" exports contain the full month, without filtering the same sales would be duplicated across snapshots. Boundary days (e.g., Feb 9 in both a Feb 4–10 and Feb 9–15 snapshot) may still appear twice — this is expected and harmless since analysis queries filter by date range, not by summing the raw table.
 
 ## Key Metrics & Formulas
 

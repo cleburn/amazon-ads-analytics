@@ -158,9 +158,18 @@ def save_weekly_snapshot(
                 ),
             )
 
-        # Save KDP daily sales
+        # Save KDP daily sales — only rows within the snapshot's date window
         units_col = "net_units_sold" if "net_units_sold" in kdp_df.columns else "units_sold"
-        for _, row in kdp_df.iterrows():
+        kdp_filtered = kdp_df.copy()
+        if not kdp_filtered.empty and "date" in kdp_filtered.columns:
+            kdp_filtered["_date_str"] = kdp_filtered["date"].apply(
+                lambda d: d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)
+            )
+            kdp_filtered = kdp_filtered[
+                (kdp_filtered["_date_str"] >= week_start)
+                & (kdp_filtered["_date_str"] <= week_end)
+            ]
+        for _, row in kdp_filtered.iterrows():
             date_val = row.get("date")
             if hasattr(date_val, "strftime"):
                 date_val = date_val.strftime("%Y-%m-%d")
