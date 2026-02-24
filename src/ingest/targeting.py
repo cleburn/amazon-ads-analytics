@@ -9,26 +9,6 @@ Handles three report types:
 import pandas as pd
 
 
-# Column map for campaign-level CSV
-CAMPAIGN_COLUMN_MAP = {
-    "Campaign name": "campaign_name",
-    "Campaign budget amount": "daily_budget",
-    "Clicks": "clicks",
-    "CTR": "ctr",
-    "Total cost": "spend",
-    "Total cost (converted)": "spend",
-    "CPC": "cpc",
-    "CPC (converted)": "cpc",
-    "Purchases": "orders",
-    "Sales": "sales",
-    "Sales (converted)": "sales",
-    "ACOS": "acos",
-    "Status": "status",
-    "Type": "campaign_type",
-    "Top-of-search impression share": "top_search_share",
-    "Campaign Name": "campaign_name",
-}
-
 # Column map for per-campaign targeting report CSVs
 # Two variants: ASIN campaigns have "Categories & products", keyword campaigns have "Keyword"
 TARGETING_REPORT_COLUMN_MAP = {
@@ -54,19 +34,6 @@ TARGETING_REPORT_COLUMN_MAP = {
     "Estimated KENP royalties (USD)": "kenp_royalty",
     "Purchase rate": "purchase_rate",
 }
-
-CSV_HEADER_MARKER = "Campaign name"
-
-
-def _find_header_row(filepath: str, max_rows: int = 10) -> int:
-    with open(filepath, "r", encoding="utf-8-sig") as f:
-        for i, line in enumerate(f):
-            if i >= max_rows:
-                break
-            if CSV_HEADER_MARKER in line or "Campaign Name" in line:
-                return i
-    return 0
-
 
 def _clean_percentage(series: pd.Series) -> pd.Series:
     return (
@@ -117,31 +84,6 @@ def _derive_match_type(targeting_raw: str, target_match_type: str) -> str:
         # Keyword — use the report's match type column
         mt = str(target_match_type).strip()
         return mt if mt and mt != "—" and mt != "nan" else "broad"
-
-
-def load_campaign_report(filepath: str) -> pd.DataFrame:
-    """Load a campaign-level report CSV (one row per campaign)."""
-    if filepath.endswith((".xlsx", ".xls")):
-        df = pd.read_excel(filepath, engine="openpyxl")
-    else:
-        header_row = _find_header_row(filepath)
-        df = pd.read_csv(filepath, skiprows=header_row, encoding="utf-8-sig")
-
-    df.columns = df.columns.str.strip()
-    rename_map = {k: v for k, v in CAMPAIGN_COLUMN_MAP.items() if k in df.columns}
-    df = df.rename(columns=rename_map)
-
-    for col in ["ctr", "acos"]:
-        if col in df.columns and df[col].dtype == object:
-            df[col] = _clean_percentage(df[col])
-    for col in ["cpc", "spend", "sales", "daily_budget"]:
-        if col in df.columns and df[col].dtype == object:
-            df[col] = _clean_currency(df[col])
-    for col in ["clicks", "orders"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
-
-    return df
 
 
 def build_targeting_from_search_terms(search_term_df: pd.DataFrame) -> pd.DataFrame:
@@ -203,6 +145,8 @@ def load_targeting_reports(filepaths: list) -> pd.DataFrame:
         df = df.rename(columns=rename_map)
 
         if "targeting_raw" not in df.columns:
+            import sys
+            print(f"  Warning: Skipping {filepath} — no targeting column found", file=sys.stderr)
             continue
 
         # Derive match type from raw targeting string

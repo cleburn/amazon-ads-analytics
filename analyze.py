@@ -43,9 +43,6 @@ def cli():
 @click.option("--search-terms", "search_terms_paths", required=True, multiple=True,
               type=click.Path(exists=True),
               help="Path to Search Term Report (CSV or XLSX). Can specify multiple.")
-@click.option("--campaign", "campaign_path", default=None,
-              type=click.Path(exists=True),
-              help="Path to Campaign Report CSV (optional, for campaign-level totals)")
 @click.option("--kdp", "kdp_path", required=True,
               type=click.Path(exists=True), help="Path to KDP Sales export (CSV or XLSX)")
 @click.option("--targeting", "targeting_paths", multiple=True,
@@ -61,7 +58,7 @@ def cli():
               help="Skip terminal output (only write markdown)")
 @click.option("--output-dir", default="reports",
               help="Directory for markdown reports")
-def report(week, search_terms_paths, campaign_path, kdp_path, targeting_paths,
+def report(week, search_terms_paths, kdp_path, targeting_paths,
            config_path, resolve_asins, save, no_terminal, output_dir):
     """Generate a weekly performance report from CSV/XLSX exports."""
     config = load_config(config_path)
@@ -86,7 +83,7 @@ def report(week, search_terms_paths, campaign_path, kdp_path, targeting_paths,
 
     # Deduplicate overlapping exports (same row from multiple files)
     if not search_term_df.empty:
-        dedup_cols = ["campaign_name", "targeting", "search_term"]
+        dedup_cols = ["campaign_name", "targeting_raw", "search_term"]
         for col in ["start_date", "end_date"]:
             if col in search_term_df.columns:
                 dedup_cols.append(col)

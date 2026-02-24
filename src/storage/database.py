@@ -109,8 +109,11 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
     for table, column, col_type in _MIGRATIONS:
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
+        except sqlite3.OperationalError as e:
+            if "duplicate column" in str(e).lower():
+                pass  # Column already exists
+            else:
+                raise
 
 
 def get_connection(db_path: str = None) -> sqlite3.Connection:
