@@ -101,9 +101,10 @@ def save_weekly_snapshot(
             cursor.execute(
                 """INSERT OR REPLACE INTO target_metrics
                    (snapshot_id, campaign_name, targeting, target_type, match_type,
-                    bid, impressions, clicks, spend, sales, orders, ctr, cpc,
+                    bid, suggested_bid_low, suggested_bid_median, suggested_bid_high,
+                    impressions, clicks, spend, sales, orders, ctr, cpc,
                     conversion_rate)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     snapshot_id,
                     row.get("campaign_name", ""),
@@ -111,6 +112,9 @@ def save_weekly_snapshot(
                     target_type,
                     row.get("match_type", ""),
                     float(row["bid"]) if pd.notna(row.get("bid")) else None,
+                    float(row["suggested_bid_low"]) if pd.notna(row.get("suggested_bid_low")) else None,
+                    float(row["suggested_bid_median"]) if pd.notna(row.get("suggested_bid_median")) else None,
+                    float(row["suggested_bid_high"]) if pd.notna(row.get("suggested_bid_high")) else None,
                     int(row.get("impressions", 0)),
                     int(row.get("clicks", 0)),
                     float(row.get("spend", 0)),
@@ -198,13 +202,14 @@ def save_weekly_snapshot(
         for _, row in bid_table.iterrows():
             cursor.execute(
                 """INSERT INTO bid_recommendations
-                   (snapshot_id, targeting, current_bid, recommended_max_bid,
-                    conversion_rate, flag)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   (snapshot_id, targeting, current_bid, suggested_bid,
+                    recommended_max_bid, conversion_rate, flag)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
                     snapshot_id,
                     row.get("targeting", ""),
                     float(row["current_bid"]) if pd.notna(row.get("current_bid")) else None,
+                    float(row["suggested_bid"]) if pd.notna(row.get("suggested_bid")) else None,
                     float(row["max_profitable_bid"]) if pd.notna(row.get("max_profitable_bid")) else None,
                     float(row.get("conversion_rate", 0)),
                     flag_lookup.get(row.get("targeting", ""), None),

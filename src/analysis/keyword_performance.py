@@ -56,7 +56,11 @@ def analyze_keywords(
                 "type": "zero_impressions",
                 "severity": "info",
                 "target": keyword,
-                "message": f"Zero impressions — bid (${row.get('bid', 0):.2f}) may be too low",
+                "message": (
+                    f"Zero impressions — bid (${row['bid']:.2f}) may be too low"
+                    if pd.notna(row.get("bid")) and row.get("bid")
+                    else "Zero impressions — bid may be too low"
+                ),
             })
 
         if row["spend"] > high_spend_threshold and row["orders"] == 0:

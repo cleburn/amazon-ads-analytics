@@ -6,40 +6,65 @@ Run every Monday (or whenever you want a fresh snapshot of the prior week).
 
 ## 1. Pull Fresh Exports
 
+You need **6 files** each week: 1 search term report, 1 KDP report, and 4 targeting reports.
+
 ### Amazon Ads — Search Term Report
 1. Go to **Amazon Advertising Console** → Reports → Search Term
 2. Set the date range covering the week you're reporting on
 3. Download the XLSX file(s)
+
+### Amazon Ads — Targeting Reports (4 files)
+1. Go to **Amazon Advertising Console** → Campaign Manager
+2. For **each campaign**, open the campaign → Targeting tab → Export
+3. Download the CSV for each:
+   - ASIN Targeting
+   - Keyword Targeting
+   - Self Targeting
+   - Deconstruction Targeting
+4. These provide actual bids, Amazon's suggested bid ranges, and per-target state
+
+> **Note:** Targeting reports are lifetime cumulative. The pipeline extracts bid/suggested bid data only — weekly performance comes from the search term report.
 
 ### KDP Dashboard Report
 1. Go to **KDP Dashboard** → select **This Month** → Download
 2. This gives daily granularity for all formats (Kindle + paperback)
 
 ### Move Files into the Project
-Move downloaded files into `data/raw/`:
 
-```
-mv ~/Downloads/Sponsored_Products_Search_term_report*.xlsx data/raw/
-mv ~/Downloads/KDP_Dashboard-*.xlsx data/raw/
+Archive last week's exports, then move new files into `data/raw/`:
+
+```bash
+# Archive last week's exports
+mv data/raw/* data/archive/
+
+# Move new files in
+mv ~/Downloads/* data/raw/
 ```
 
-> **Tip:** Before moving new files in, delete or archive the old ones from `data/raw/` so the tool doesn't pick up stale data.
+> **Archive**: `data/archive/` keeps all past raw exports for potential re-ingestion or Phase 3 training data. The SQLite database stores structured weekly snapshots; the archive preserves the original files.
+
+### Expected Files in data/raw/
+
+| # | File Pattern | Format | Source |
+|---|-------------|--------|--------|
+| 1 | `Sponsored_Products_Search_term_report*.xlsx` | XLSX | Amazon Ads Console |
+| 2 | `KDP_Dashboard-*.xlsx` | XLSX | KDP Dashboard |
+| 3-6 | `Sponsored_Products_Target*.csv` | CSV | Amazon Ads Console (1 per campaign) |
 
 ---
 
 ## 2. Run the Report
 
-From Terminal, `cd` into the project folder and run:
-
-```
+```bash
 cd ~/repos/amazon-ads-analytics
-bash run-report.sh 2026-02-16 --save
+bash run-report.sh 2026-02-23 --save
 ```
 
-Replace `2026-02-16` with today's date (the pull date). The report automatically covers the 7 days before it (e.g., `2026-02-16` → reports on Feb 9–15).
+Replace the date with today's date (the pull date). The report automatically covers the 7 days before it (e.g., `2026-02-23` → reports on Feb 16–22).
 
-- The script auto-discovers your search term and KDP files in `data/raw/`
-- `--save` stores the snapshot in SQLite for trend tracking (optional but recommended)
+- The script auto-discovers all files in `data/raw/` by pattern
+- Targeting reports are optional — if absent, bid enrichment is skipped
+- `--save` stores the snapshot in SQLite for trend tracking
 - The markdown report saves to `reports/week-YYYY-MM-DD.md`
 
 ---
@@ -49,21 +74,24 @@ Replace `2026-02-16` with today's date (the pull date). The report automatically
 The report prints to Terminal and also saves a markdown file in `reports/`.
 
 **Key things to check each week:**
-- **ACoS** — target is under 50%. Over 100% means you're losing money on attributed sales
-- **Ad-Influenced ROAS** — the fuller picture (KDP royalty vs ad spend). Over 1.0x = profitable
+- **Impressions & Clicks** — primary optimization targets. More exposure = more sales
+- **Ad-Influenced ROAS** — the full picture (KDP royalty vs ad spend). Over 1.0x = profitable
+- **Bid Recommendations** — three-column comparison:
+  - **Current Bid**: your actual bid (from targeting report)
+  - **Suggested Bid**: Amazon's recommended median bid
+  - **Max Profitable Bid**: calculated ceiling based on conversion data
 - **Flags** — high-spend/zero-order targets are candidates for bid reduction or pausing
-- **Bid Recommendations** — if current bid exceeds max profitable bid, lower it
 - **Search Term Drift** — broad match expanding to irrelevant ASINs = wasted spend
-- **ASIN Placements** — search terms that are ASINs are resolved to book titles automatically. Check that your ads are appearing on relevant competitor books. Any "(unknown)" entries were ASINs that couldn't be looked up — you can manually add them to `data/asin_lookup.json`
+- **ASIN Placements** — search terms that are ASINs are resolved to book titles automatically
 
-> **ASIN Resolution**: The tool resolves ASIN search terms to book titles using `data/asin_lookup.json`. Unknown ASINs are scraped from Amazon and cached automatically. If scraping causes issues, pass `--no-resolve-asins` to disable.
+> **ASIN Resolution**: The tool resolves ASIN search terms to book titles using `data/asin_lookup.json`. Unknown ASINs are scraped from Amazon and cached automatically. Pass `--no-resolve-asins` to disable.
 
 ---
 
 ## 4. Take Action in Amazon Ads Console
 
 Based on what the report flags:
-- **Lower bids** on targets where current bid exceeds max profitable bid
+- **Adjust bids** using Amazon's suggested bid range as primary guidance
 - **Pause targets** that have accumulated spend with zero conversions
 - **Add negative targets** for drifted search terms burning budget
 - **Increase bids** on targets flagged as underserving (too few impressions)

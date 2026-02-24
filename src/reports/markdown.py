@@ -95,7 +95,7 @@ def _asin_performance_section(result: dict) -> str:
         za_headers = ["ASIN", "Title", "Bid"]
         za_rows = []
         for t in zero_activity:
-            za_rows.append([t["asin"], t["title"], _fmt_dollar(t["bid"])])
+            za_rows.append([t["asin"], t["title"], _fmt_dollar(t.get("bid"))])
         section += _md_table(za_headers, za_rows) + "\n"
 
     return section
@@ -252,7 +252,7 @@ def _bid_section(result: dict) -> str:
     if df.empty:
         return "## 6. Bid Recommendations\n\nNo bid recommendation data."
 
-    headers = ["Target", "Campaign", "Clicks", "Orders", "Conv Rate", "Current Bid", "Max Bid"]
+    headers = ["Target", "Campaign", "Clicks", "Orders", "Conv Rate", "Current Bid", "Suggested", "Max Bid"]
     rows = []
     for _, row in df.iterrows():
         rows.append([
@@ -262,6 +262,7 @@ def _bid_section(result: dict) -> str:
             _fmt_int(row["orders"]),
             _fmt_pct(row.get("conversion_rate")),
             _fmt_dollar(row.get("current_bid")),
+            _fmt_dollar(row.get("suggested_bid")),
             _fmt_dollar(row.get("max_profitable_bid")),
         ])
 

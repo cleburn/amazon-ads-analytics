@@ -7,6 +7,7 @@ import yaml
 def analyze_asin_targets(
     targeting_df: pd.DataFrame,
     config: dict,
+    bid_lookup: dict = None,
 ) -> dict:
     """Analyze ASIN-targeting campaign performance.
 
@@ -16,6 +17,8 @@ def analyze_asin_targets(
     Args:
         targeting_df: Normalized targeting report DataFrame.
         config: Parsed campaigns.yaml config dict.
+        bid_lookup: Optional dict from build_bid_lookup() — maps targeting
+            to bid/suggested bid data from targeting reports.
 
     Returns:
         dict with keys:
@@ -25,6 +28,7 @@ def analyze_asin_targets(
     if targeting_df.empty or "campaign_name" not in targeting_df.columns:
         return {"table": pd.DataFrame(), "flags": [], "zero_activity_targets": []}
 
+    bid_lookup = bid_lookup or {}
     settings = config.get("settings", {})
     high_spend_threshold = settings.get("high_spend_flag", 5.0)
     low_impressions_threshold = settings.get("low_impressions_flag", 10)
@@ -43,9 +47,9 @@ def analyze_asin_targets(
         if campaign.get("type") != "product_targeting":
             continue
         for target in campaign.get("targets", []):
+            # Use ASIN as key; if multiple entries (exact+expanded), last wins
             target_lookup[target["asin"]] = {
                 "title": target.get("title", ""),
-                "config_bid": target.get("bid", None),
                 "campaign_key": key,
             }
 
@@ -56,9 +60,6 @@ def analyze_asin_targets(
         # Enrich with config data
         df["target_title"] = df["targeting"].map(
             lambda x: target_lookup.get(x, {}).get("title", "")
-        )
-        df["config_bid"] = df["targeting"].map(
-            lambda x: target_lookup.get(x, {}).get("config_bid")
         )
 
         # Compute derived metrics
@@ -97,10 +98,11 @@ def analyze_asin_targets(
     active_asins = set(df["targeting"].unique()) if not df.empty else set()
     for asin, info in target_lookup.items():
         if asin not in active_asins:
+            bid_data = bid_lookup.get(asin, {})
             zero_activity_targets.append({
                 "asin": asin,
                 "title": info["title"],
-                "bid": info["config_bid"],
+                "bid": bid_data.get("bid"),
             })
             flags.append({
                 "type": "zero_activity",

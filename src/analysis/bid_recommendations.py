@@ -11,6 +11,11 @@ def recommend_bids(
 
     Formula: max_bid = blended_royalty * conversion_rate / target_acos
 
+    The three-column bid display:
+    - Current Bid: actual bid from targeting report exports
+    - Suggested Bid: Amazon's median suggested bid from targeting report
+    - Max Profitable Bid: calculated ceiling based on conversion data
+
     Args:
         targeting_df: Normalized targeting report DataFrame.
         config: Parsed campaigns.yaml config dict.
@@ -44,15 +49,17 @@ def recommend_bids(
         lambda cr: (blended_royalty * cr / target_acos) if cr > 0 else None
     )
 
-    # Current bid (from report or config)
-    current_bid_col = "bid" if "bid" in df.columns else None
+    # Current bid and suggested bid (from targeting report enrichment)
+    has_bid = "bid" in df.columns
+    has_suggested = "suggested_bid_median" in df.columns
 
     # Generate flags
     flags = []
     for _, row in df.iterrows():
         target = row["targeting"]
         campaign = row.get("campaign_name", "")
-        current_bid = row.get("bid") if current_bid_col else None
+        current_bid = row.get("bid") if has_bid and pd.notna(row.get("bid")) else None
+        suggested_bid = row.get("suggested_bid_median") if has_suggested and pd.notna(row.get("suggested_bid_median")) else None
         max_bid = row.get("max_profitable_bid")
         clicks = row.get("clicks", 0)
 
@@ -64,6 +71,7 @@ def recommend_bids(
                     "target": target,
                     "campaign": campaign,
                     "current_bid": current_bid,
+                    "suggested_bid": suggested_bid,
                     "recommended_bid": None,
                     "message": "No impressions or clicks — insufficient data for bid recommendation",
                 })
@@ -76,6 +84,7 @@ def recommend_bids(
                 "target": target,
                 "campaign": campaign,
                 "current_bid": current_bid,
+                "suggested_bid": suggested_bid,
                 "recommended_bid": None,
                 "message": (
                     f"{clicks} clicks but 0 orders — no conversion data yet. "
@@ -86,48 +95,53 @@ def recommend_bids(
 
         if current_bid is not None and max_bid is not None:
             if current_bid > max_bid:
+                msg = f"Current bid ${current_bid:.2f} exceeds max profitable bid ${max_bid:.2f} at {target_acos:.0%} ACoS target"
+                if suggested_bid:
+                    msg += f" (Amazon suggests ${suggested_bid:.2f})"
                 flags.append({
                     "type": "bid_above_profitable",
                     "severity": "warning",
                     "target": target,
                     "campaign": campaign,
                     "current_bid": current_bid,
+                    "suggested_bid": suggested_bid,
                     "recommended_bid": max_bid,
-                    "message": (
-                        f"Current bid ${current_bid:.2f} exceeds max profitable "
-                        f"bid ${max_bid:.2f} at {target_acos:.0%} ACoS target"
-                    ),
+                    "message": msg,
                 })
             elif current_bid < max_bid * 0.5:
-                # Bid is less than half the profitable max — may be missing impressions
+                msg = (
+                    f"Current bid ${current_bid:.2f} is well below max profitable "
+                    f"bid ${max_bid:.2f} — room to increase for more impressions"
+                )
+                if suggested_bid:
+                    msg += f" (Amazon suggests ${suggested_bid:.2f})"
                 flags.append({
                     "type": "bid_below_range",
                     "severity": "info",
                     "target": target,
                     "campaign": campaign,
                     "current_bid": current_bid,
+                    "suggested_bid": suggested_bid,
                     "recommended_bid": max_bid,
-                    "message": (
-                        f"Current bid ${current_bid:.2f} is well below max profitable "
-                        f"bid ${max_bid:.2f} — room to increase for more impressions"
-                    ),
+                    "message": msg,
                 })
 
-    # Add recommendation columns for display
-    rec_df = df[
-        [
-            "campaign_name",
-            "targeting",
-            "impressions",
-            "clicks",
-            "orders",
-            "spend",
-            "conversion_rate",
-        ]
-    ].copy()
+    # Build recommendation table
+    cols = [
+        "campaign_name",
+        "targeting",
+        "impressions",
+        "clicks",
+        "orders",
+        "spend",
+        "conversion_rate",
+    ]
+    rec_df = df[cols].copy()
 
-    if current_bid_col:
+    if has_bid:
         rec_df["current_bid"] = df["bid"]
+    if has_suggested:
+        rec_df["suggested_bid"] = df["suggested_bid_median"]
     rec_df["max_profitable_bid"] = df["max_profitable_bid"]
 
     # Sort by spend descending (most spend = most important to optimize)

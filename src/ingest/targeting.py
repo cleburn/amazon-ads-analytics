@@ -1,18 +1,16 @@
-"""Parse Amazon Ads Targeting/Campaign Report exports (CSV or XLSX).
+"""Parse Amazon Ads Targeting/Campaign Report exports.
 
-Amazon provides two kinds of exports:
-1. A per-target "Targeting Report" with one row per keyword/ASIN (not always available)
-2. A campaign-level CSV with one row per campaign
-
-This module handles both. When only the campaign-level CSV is available,
-per-target data comes from the search term report aggregated by targeting.
+Handles three report types:
+1. Campaign-level CSV (one row per campaign)
+2. Per-campaign targeting report CSVs (bid + suggested bid data)
+3. Search term aggregation to per-target level
 """
 
 import pandas as pd
 
 
-COLUMN_MAP = {
-    # Campaign-level CSV columns (actual format from Amazon)
+# Column map for campaign-level CSV
+CAMPAIGN_COLUMN_MAP = {
     "Campaign name": "campaign_name",
     "Campaign budget amount": "daily_budget",
     "Clicks": "clicks",
@@ -27,25 +25,34 @@ COLUMN_MAP = {
     "ACOS": "acos",
     "Status": "status",
     "Type": "campaign_type",
-    "Targeting": "targeting_mode",
     "Top-of-search impression share": "top_search_share",
-    # Per-target report columns (if available)
     "Campaign Name": "campaign_name",
-    "Targeting": "targeting",
-    "Match Type": "match_type",
-    "Bid": "bid",
+}
+
+# Column map for per-campaign targeting report CSVs
+# Two variants: ASIN campaigns have "Categories & products", keyword campaigns have "Keyword"
+TARGETING_REPORT_COLUMN_MAP = {
+    "State": "state",
+    "Categories & products": "targeting_raw",
+    "Keyword": "targeting_raw",
+    "Target match type": "target_match_type",
+    "Status": "status",
+    "Suggested bid (low)(USD)": "suggested_bid_low",
+    "Suggested bid (median)(USD)": "suggested_bid_median",
+    "Suggested bid (high)(USD)": "suggested_bid_high",
+    "Bid (USD)": "bid",
     "Impressions": "impressions",
-    "Spend": "spend",
-    "Cost Per Click (CPC)": "cpc",
-    "Click-Thru Rate (CTR)": "ctr",
-    "14 Day Total Sales ": "sales",
-    "14 Day Total Sales": "sales",
-    "14 Day Total Orders (#)": "orders",
-    "Total Advertising Cost of Sales (ACOS) ": "acos",
-    "Total Advertising Cost of Sales (ACOS)": "acos",
-    "7 Day Total Sales": "sales",
-    "7 Day Total Orders (#)": "orders",
-    "Total Advertising Cost of Sales (ACoS)": "acos",
+    "Top-of-search impression share": "top_search_share",
+    "Clicks": "clicks",
+    "CTR": "ctr",
+    "Total cost (USD)": "spend",
+    "CPC (USD)": "cpc",
+    "Purchases": "orders",
+    "Sales (USD)": "sales",
+    "ACOS": "acos",
+    "KENP read": "kenp_read",
+    "Estimated KENP royalties (USD)": "kenp_royalty",
+    "Purchase rate": "purchase_rate",
 }
 
 CSV_HEADER_MARKER = "Campaign name"
@@ -65,6 +72,7 @@ def _clean_percentage(series: pd.Series) -> pd.Series:
     return (
         series.astype(str)
         .str.replace("%", "", regex=False)
+        .str.replace("<", "", regex=False)
         .str.strip()
         .replace("", "0")
         .replace("nan", "0")
@@ -84,6 +92,7 @@ def _clean_currency(series: pd.Series) -> pd.Series:
 
 
 def _normalize_targeting(series: pd.Series) -> pd.Series:
+    """Strip ASIN targeting wrappers: asin-expanded="X" and asin="X" -> X."""
     return (
         series.astype(str)
         .str.replace('asin-expanded="', "", regex=False)
@@ -93,11 +102,25 @@ def _normalize_targeting(series: pd.Series) -> pd.Series:
     )
 
 
-def load_campaign_report(filepath: str) -> pd.DataFrame:
-    """Load a campaign-level report CSV (one row per campaign).
+def _derive_match_type(targeting_raw: str, target_match_type: str) -> str:
+    """Derive match type from raw targeting string and report column.
 
-    Returns a DataFrame with campaign-level metrics.
+    For ASIN targets: asin="X" -> exact, asin-expanded="X" -> expanded
+    For keywords: use the Target match type column value (e.g. "Broad")
     """
+    raw = str(targeting_raw)
+    if raw.startswith('asin="'):
+        return "exact"
+    elif raw.startswith('asin-expanded="'):
+        return "expanded"
+    else:
+        # Keyword — use the report's match type column
+        mt = str(target_match_type).strip()
+        return mt if mt and mt != "—" and mt != "nan" else "broad"
+
+
+def load_campaign_report(filepath: str) -> pd.DataFrame:
+    """Load a campaign-level report CSV (one row per campaign)."""
     if filepath.endswith((".xlsx", ".xls")):
         df = pd.read_excel(filepath, engine="openpyxl")
     else:
@@ -105,10 +128,9 @@ def load_campaign_report(filepath: str) -> pd.DataFrame:
         df = pd.read_csv(filepath, skiprows=header_row, encoding="utf-8-sig")
 
     df.columns = df.columns.str.strip()
-    rename_map = {k: v for k, v in COLUMN_MAP.items() if k in df.columns}
+    rename_map = {k: v for k, v in CAMPAIGN_COLUMN_MAP.items() if k in df.columns}
     df = df.rename(columns=rename_map)
 
-    # Clean percentage/currency columns if stored as strings
     for col in ["ctr", "acos"]:
         if col in df.columns and df[col].dtype == object:
             df[col] = _clean_percentage(df[col])
@@ -157,39 +179,128 @@ def build_targeting_from_search_terms(search_term_df: pd.DataFrame) -> pd.DataFr
         axis=1,
     )
 
-    # Preserve targeting_raw (same as targeting here since already normalized)
     grouped["targeting_raw"] = grouped["targeting"]
 
     return grouped
 
 
-def load_targeting_report(filepath: str) -> pd.DataFrame:
-    """Load a per-target targeting report (CSV or XLSX).
+def load_targeting_reports(filepaths: list) -> pd.DataFrame:
+    """Load and concatenate multiple per-campaign targeting report CSVs.
 
-    Falls back gracefully if the file is actually campaign-level.
+    Handles two column variants:
+    - ASIN campaigns: "Categories & products" column with asin="..." values
+    - Keyword campaigns: "Keyword" column with keyword text
+
+    Returns a DataFrame with normalized columns including bid and suggested bids.
+    Note: performance metrics are lifetime cumulative, not weekly.
     """
-    if filepath.endswith((".xlsx", ".xls")):
-        df = pd.read_excel(filepath, engine="openpyxl")
-    else:
-        header_row = _find_header_row(filepath)
-        df = pd.read_csv(filepath, skiprows=header_row, encoding="utf-8-sig")
+    frames = []
+    for filepath in filepaths:
+        df = pd.read_csv(filepath, encoding="utf-8-sig")
+        df.columns = df.columns.str.strip()
 
-    df.columns = df.columns.str.strip()
-    rename_map = {k: v for k, v in COLUMN_MAP.items() if k in df.columns}
-    df = df.rename(columns=rename_map)
+        rename_map = {k: v for k, v in TARGETING_REPORT_COLUMN_MAP.items() if k in df.columns}
+        df = df.rename(columns=rename_map)
 
-    for col in ["ctr", "acos"]:
-        if col in df.columns and df[col].dtype == object:
-            df[col] = _clean_percentage(df[col])
-    for col in ["cpc", "spend", "sales", "bid"]:
-        if col in df.columns and df[col].dtype == object:
-            df[col] = _clean_currency(df[col])
-    for col in ["impressions", "clicks", "orders"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+        if "targeting_raw" not in df.columns:
+            continue
 
-    if "targeting" in df.columns:
-        df["targeting_raw"] = df["targeting"]
-        df["targeting"] = _normalize_targeting(df["targeting"])
+        # Derive match type from raw targeting string
+        df["match_type"] = df.apply(
+            lambda r: _derive_match_type(
+                r.get("targeting_raw", ""),
+                r.get("target_match_type", ""),
+            ),
+            axis=1,
+        )
 
-    return df
+        # Normalize targeting (strip asin="..." wrappers)
+        df["targeting"] = _normalize_targeting(df["targeting_raw"])
+
+        # Clean currency columns
+        for col in ["bid", "suggested_bid_low", "suggested_bid_median",
+                     "suggested_bid_high", "spend", "cpc", "sales", "kenp_royalty"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+
+        # Clean integer columns
+        for col in ["impressions", "clicks", "orders", "kenp_read"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+
+        # Clean percentage columns
+        for col in ["ctr", "acos", "purchase_rate"]:
+            if col in df.columns and df[col].dtype == object:
+                df[col] = _clean_percentage(df[col])
+
+        # Top-of-search impression share: can be "0", "<5%", "92.86%", etc.
+        if "top_search_share" in df.columns and df["top_search_share"].dtype == object:
+            df["top_search_share"] = (
+                df["top_search_share"]
+                .astype(str)
+                .str.replace("%", "", regex=False)
+                .str.replace("<", "", regex=False)
+                .str.strip()
+                .replace("", "0")
+                .replace("nan", "0")
+            )
+            df["top_search_share"] = pd.to_numeric(
+                df["top_search_share"], errors="coerce"
+            ).fillna(0.0)
+
+        # Normalize state column
+        if "state" in df.columns:
+            df["state"] = df["state"].astype(str).str.strip().str.upper()
+
+        # Drop the intermediate column
+        if "target_match_type" in df.columns:
+            df = df.drop(columns=["target_match_type"])
+
+        frames.append(df)
+
+    if not frames:
+        return pd.DataFrame()
+
+    return pd.concat(frames, ignore_index=True)
+
+
+def build_bid_lookup(targeting_report_df: pd.DataFrame) -> dict:
+    """Build a targeting -> bid data lookup from targeting reports.
+
+    Filters to ENABLED rows. If multiple ENABLED rows exist for the same
+    normalized targeting (e.g. Sophia Code with both exact + expanded),
+    takes the row with higher impressions.
+
+    Returns:
+        dict of {targeting: {"bid", "suggested_bid_low", "suggested_bid_median",
+                             "suggested_bid_high"}}
+    """
+    if targeting_report_df.empty:
+        return {}
+
+    df = targeting_report_df.copy()
+
+    # Prefer ENABLED rows
+    enabled = df[df["state"] == "ENABLED"]
+    if enabled.empty:
+        enabled = df  # Fall back to all rows if none are enabled
+
+    # For each normalized targeting, keep the row with most impressions
+    impr_col = "impressions" if "impressions" in enabled.columns else None
+    if impr_col:
+        enabled = enabled.sort_values(impr_col, ascending=False)
+
+    enabled = enabled.drop_duplicates(subset=["targeting"], keep="first")
+
+    lookup = {}
+    for _, row in enabled.iterrows():
+        targeting = row["targeting"]
+        bid_val = row.get("bid", 0.0)
+        lookup[targeting] = {
+            "bid": bid_val if bid_val > 0 else None,
+            "suggested_bid_low": row.get("suggested_bid_low") or None,
+            "suggested_bid_median": row.get("suggested_bid_median") or None,
+            "suggested_bid_high": row.get("suggested_bid_high") or None,
+        }
+
+    return lookup

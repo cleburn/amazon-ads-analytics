@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS target_metrics (
     target_type TEXT NOT NULL,
     match_type TEXT,
     bid REAL,
+    suggested_bid_low REAL,
+    suggested_bid_median REAL,
+    suggested_bid_high REAL,
     impressions INTEGER,
     clicks INTEGER,
     spend REAL,
@@ -84,11 +87,30 @@ CREATE TABLE IF NOT EXISTS bid_recommendations (
     snapshot_id INTEGER NOT NULL REFERENCES weekly_snapshots(id),
     targeting TEXT NOT NULL,
     current_bid REAL,
+    suggested_bid REAL,
     recommended_max_bid REAL,
     conversion_rate REAL,
     flag TEXT
 );
 """
+
+# Migration queries for existing databases that lack new columns.
+# Each is (table, column, type). Failures are silently ignored (column already exists).
+_MIGRATIONS = [
+    ("target_metrics", "suggested_bid_low", "REAL"),
+    ("target_metrics", "suggested_bid_median", "REAL"),
+    ("target_metrics", "suggested_bid_high", "REAL"),
+    ("bid_recommendations", "suggested_bid", "REAL"),
+]
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Add new columns to existing tables, ignoring errors if already present."""
+    for table, column, col_type in _MIGRATIONS:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
 
 def get_connection(db_path: str = None) -> sqlite3.Connection:
@@ -104,6 +126,7 @@ def get_connection(db_path: str = None) -> sqlite3.Connection:
 
     # Create tables if they don't exist
     conn.executescript(SCHEMA)
+    _run_migrations(conn)
     conn.commit()
 
     return conn

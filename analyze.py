@@ -9,7 +9,7 @@ import pandas as pd
 import yaml
 
 from src.ingest.search_terms import load_search_term_report
-from src.ingest.targeting import build_targeting_from_search_terms
+from src.ingest.targeting import build_targeting_from_search_terms, load_targeting_reports, build_bid_lookup
 from src.ingest.kdp import load_kdp_report, load_kdp_orders
 from src.analysis.campaign_summary import generate_campaign_summary
 from src.analysis.asin_performance import analyze_asin_targets
@@ -48,6 +48,9 @@ def cli():
               help="Path to Campaign Report CSV (optional, for campaign-level totals)")
 @click.option("--kdp", "kdp_path", required=True,
               type=click.Path(exists=True), help="Path to KDP Sales export (CSV or XLSX)")
+@click.option("--targeting", "targeting_paths", multiple=True,
+              type=click.Path(exists=True),
+              help="Path to Targeting Report CSV (one per campaign). Can specify multiple.")
 @click.option("--config", "config_path", default="config/campaigns.yaml",
               help="Path to campaign config YAML")
 @click.option("--save", is_flag=True, default=False,
@@ -58,8 +61,8 @@ def cli():
               help="Skip terminal output (only write markdown)")
 @click.option("--output-dir", default="reports",
               help="Directory for markdown reports")
-def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
-           resolve_asins, save, no_terminal, output_dir):
+def report(week, search_terms_paths, campaign_path, kdp_path, targeting_paths,
+           config_path, resolve_asins, save, no_terminal, output_dir):
     """Generate a weekly performance report from CSV/XLSX exports."""
     config = load_config(config_path)
 
@@ -100,13 +103,23 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
     targeting_df = build_targeting_from_search_terms(search_term_df)
     click.echo(f"  Targeting (derived from search terms): {len(targeting_df)} targets")
 
-    # Enrich targeting_df with bid data from config
-    target_bids = {}
-    for key, campaign in config.get("campaigns", {}).items():
-        for target in campaign.get("targets", []):
-            target_bids[target["asin"]] = target.get("bid")
-    if not targeting_df.empty:
-        targeting_df["bid"] = targeting_df["targeting"].map(target_bids)
+    # Enrich targeting_df with bid + suggested bid data from targeting reports
+    bid_lookup = {}
+    if targeting_paths:
+        targeting_report_df = load_targeting_reports(list(targeting_paths))
+        click.echo(f"  Targeting reports: {len(targeting_report_df)} rows from {len(targeting_paths)} files")
+        bid_lookup = build_bid_lookup(targeting_report_df)
+        if not targeting_df.empty and bid_lookup:
+            targeting_df["bid"] = targeting_df["targeting"].map(
+                lambda t: bid_lookup.get(t, {}).get("bid"))
+            targeting_df["suggested_bid_low"] = targeting_df["targeting"].map(
+                lambda t: bid_lookup.get(t, {}).get("suggested_bid_low"))
+            targeting_df["suggested_bid_median"] = targeting_df["targeting"].map(
+                lambda t: bid_lookup.get(t, {}).get("suggested_bid_median"))
+            targeting_df["suggested_bid_high"] = targeting_df["targeting"].map(
+                lambda t: bid_lookup.get(t, {}).get("suggested_bid_high"))
+            enriched = targeting_df["bid"].notna().sum()
+            click.echo(f"  Bid enrichment: {enriched}/{len(targeting_df)} targets matched")
 
     # KDP sales
     kdp_df = load_kdp_report(kdp_path)
@@ -141,7 +154,7 @@ def report(week, search_terms_paths, campaign_path, kdp_path, config_path,
     # Analysis
     click.echo("Running analysis...")
     campaign_summary = generate_campaign_summary(targeting_df, prior_week_df)
-    asin_performance = analyze_asin_targets(targeting_df, config)
+    asin_performance = analyze_asin_targets(targeting_df, config, bid_lookup=bid_lookup)
     keyword_performance = analyze_keywords(targeting_df, config)
     search_term_analysis = analyze_search_terms(search_term_df, config)
     kdp_recon = reconcile_kdp_sales(

@@ -14,38 +14,11 @@ Built to manage ad campaigns for [Ascension: Knowing God in You](https://a.co/d/
 
 ## Campaign Structure
 
-4 Amazon Sponsored Products campaigns ($40/day total, restructured Feb 16, 2026):
-- **ASIN Targeting** ($15/day) — 8 active, 8 paused targets
-- **Keyword Targeting** ($10/day) — 29 active, 7 paused keywords
-- **Self Targeting** ($3/day) — 2 active, 2 paused targets
-- **Deconstruction Targeting** ($12/day) — 13 active targets
-
-## Quick Start
-
-```bash
-conda create -n ascension-ads python=3.11
-conda activate ascension-ads
-pip install -r requirements.txt
-
-# Weekly report (using the wrapper script)
-bash run-report.sh 2026-02-04 --save
-
-# Or run directly (supports multiple search term files)
-python analyze.py report \
-  --week 2026-02-04 \
-  --search-terms "data/raw/Sponsored_Products_Search_term_report.xlsx" \
-  --search-terms "data/raw/Sponsored_Products_Search_term_report (1).xlsx" \
-  --kdp "data/raw/KDP_Dashboard-*.xlsx" \
-  --save
-
-# Trends over time (requires prior --save runs)
-python analyze.py trends --metric acos --weeks 8
-
-# Lifetime summary
-python analyze.py lifetime
-```
-
-`run-report.sh` handles conda activation and auto-discovers files in `data/raw/`. See [weekly-update-workflow.md](weekly-update-workflow.md) for the full export-to-report workflow.
+4 Amazon Sponsored Products campaigns ($45/day total):
+- **ASIN Targeting** ($20/day) — Sophia Code (exact + expanded), 6 other competitors (expanded)
+- **Keyword Targeting** ($10/day) — 33 active broad-match keywords
+- **Self Targeting** ($3/day) — Book 1 pages → Book 2
+- **Deconstruction Targeting** ($12/day) — 13 faith deconstruction/progressive Christianity targets
 
 ## Architecture
 
@@ -56,7 +29,7 @@ data/asin_lookup.json       ASIN-to-title mapping for search term display names
 
 src/ingest/
   search_terms.py           Parse Amazon Search Term Report (CSV or XLSX)
-  targeting.py              Campaign Report parser + target aggregation from search terms
+  targeting.py              Targeting report parser + bid lookup + target aggregation from search terms
   kdp.py                    Parse KDP multi-sheet XLSX workbook
 
 src/analysis/
@@ -90,12 +63,11 @@ src/storage/
 
 ## Data Sources
 
-- **Amazon Ads Search Term Report** (XLSX) — primary input, one row per search term per target per day, 14-day attribution window
-- **Amazon Ads Campaign Report** (CSV) — optional campaign-level summary
-- **KDP Dashboard Report** (XLSX) — preferred for weekly analysis; daily granularity for all formats via Combined Sales sheet
+- **Amazon Ads Search Term Report** (XLSX) — primary weekly performance data, one row per search term per target per day
+- **Amazon Ads Targeting Reports** (CSV, 4 per week) — per-campaign exports with actual bids, Amazon's suggested bid ranges, and target state. Lifetime cumulative; only bid data is extracted
+- **KDP Dashboard Report** (XLSX) — daily sales granularity for all formats
 - **KDP Orders/Lifetime Report** (XLSX) — monthly granularity; used for historical context. Auto-detected by the tool
-
-- **ASIN Lookup** (`data/asin_lookup.json`) — maps competitor ASINs to book titles. Pre-seeded with the 12 campaign targets. Unknown ASINs encountered in reports are auto-scraped from Amazon and cached here.
+- **ASIN Lookup** (`data/asin_lookup.json`) — maps competitor ASINs to book titles. Unknown ASINs auto-scraped from Amazon and cached
 
 Raw data files are gitignored. Place exports in `data/raw/` to run reports.
 
@@ -110,7 +82,9 @@ Raw data files are gitignored. Place exports in `data/raw/` to run reports.
 | `bid_below_range` | Info | Bid is <50% of max profitable (room to increase) |
 | `broad_match_expansion` | Info | Broad match expanded to unrelated term |
 | `zero_impressions` | Info | Keyword getting 0 impressions |
+| `zero_activity` | Info | Configured target absent from search term data |
 | `no_conversions` | Info | Clicks but 0 orders |
+| `no_data` | Info | No impressions or clicks |
 
 ## Project Phases
 

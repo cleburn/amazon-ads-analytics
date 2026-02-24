@@ -25,33 +25,50 @@ Understanding this timeline is critical for interpreting all data:
 5. **Jan 26, 2026**: Amazon Sponsored Products campaigns go live ($15/day total budget)
 6. **Feb 3, 2026**: Self-targeting campaign added (Book 1 pages → Book 2)
 7. **Feb 16, 2026**: Major campaign restructure — paused underperforming ASIN/keyword targets, added Deconstruction Targeting campaign, raised budgets to $40/day total
+8. **Feb 23, 2026**: Shifted ASIN and Deconstruction campaigns from exact to expanded match (exact match on cold targets produced zero impressions). Reactivated 4 keywords. Raised ASIN Targeting to $20/day ($45 total). Integrated per-campaign targeting reports into pipeline; removed bid fields from config.
 
 Pre-ad sales are entirely organic/email-driven. Any KDP sales before Jan 26, 2026 have zero ad attribution.
 
+**Strategic frame**: Campaigns are optimized for maximum impressions and clicks, not direct conversions. ~80% of KDP sales are unattributed by Amazon (wrong format, Book 1 halo, paired purchases). Ad-Influenced ROAS (using all KDP royalty) is the real profitability metric.
+
 ## Campaign Structure
 
-4 campaigns at $40/day total (restructured Feb 16, 2026):
-- **ASIN Targeting** ($15/day): 8 active competitor book ASINs (Sophia Code, Power of Now, Becoming Supernatural, Four Agreements, Autobiography of a Yogi) + 8 paused underperformers. The Sophia Code paperback dominates impressions (~70-80%)
-- **Keyword Targeting** ($10/day): 29 active broad-match keywords + 7 paused. Bids range $0.13–$2.38
-- **Self Targeting** ($3/day): Book 1 product pages → Book 2. 2 exact match targets active, 2 expanded match paused. All bids $0.55
-- **Deconstruction Targeting** ($12/day): 13 competitor book ASINs in the faith deconstruction/progressive Christianity space (Richard Rohr, Rob Bell, Rachel Held Evans, Barbara Brown Taylor, Peter Enns, Cynthia Bourgeault). New campaign launched Feb 16, 2026
+4 campaigns at $45/day total (restructured Feb 23, 2026):
+- **ASIN Targeting** ($20/day): Mixed match types. Sophia Code PB/Kindle run on both exact + expanded. 6 other targets (Becoming Supernatural, Power of Now, Four Agreements, Autobiography of a Yogi) on expanded only. 14 paused targets. Sophia Code PB dominates impressions (~70-80%)
+- **Keyword Targeting** ($10/day): 33 active broad-match keywords + 3 paused. Bids set to Amazon suggested bids
+- **Self Targeting** ($3/day): Book 1 product pages → Book 2. 2 exact match targets active, 2 expanded match paused
+- **Deconstruction Targeting** ($12/day): 13 competitor book ASINs in faith deconstruction/progressive Christianity space, all on expanded match. Authors: Richard Rohr, Rob Bell, Rachel Held Evans, Barbara Brown Taylor, Peter Enns, Cynthia Bourgeault
 
 All campaign names are prefixed "Ascension Book2 - " in Amazon's system.
 
 ### Config Schema Notes
 - `campaigns.yaml` uses `targets` for active targets and `paused_targets` for paused ones. Analysis code only reads `targets`, so paused entries won't trigger false "zero activity" flags.
-- Keyword campaign uses `keywords` / `paused_keywords` lists (added Feb 16, 2026). Analysis code doesn't read these yet — keyword bids aren't enriched from config. The lists serve as a reference for manual bid management.
+- **No bid fields in config.** Bids are sourced from weekly targeting report CSV exports. The config defines structure only (which targets, match types, active/paused).
+- Keyword campaign uses `keywords` / `paused_keywords` lists. Keyword bids come from targeting reports, not config.
+- ASIN targets include per-target `match_type` (exact/expanded) since the ASIN Targeting campaign uses mixed match types.
 
 ## Data Sources & Formats
 
-Amazon exports are **XLSX** (not CSV). KDP exports are multi-sheet **XLSX** workbooks.
+6 files are ingested weekly: 1-2 search term reports (XLSX), 4 targeting reports (CSV), 1 KDP report (XLSX).
 
 ### Amazon Ads — Search Term Reports (XLSX)
 - Exported from Amazon Advertising console, possibly split across multiple files by date range
 - Uses 14-day attribution window (columns: "14 Day Total Sales", "14 Day Total Orders (#)")
 - Targeting format: `asin-expanded="0997935502"` (tool normalizes to just the ASIN)
 - One row per search term per targeting expression per day
-- This is the primary data source — no separate "targeting report" is needed. Per-target metrics are derived by aggregating the search term report.
+- Primary source for **weekly performance metrics** per target
+
+### Amazon Ads — Targeting Reports (CSV, 1 per campaign)
+- Exported from Amazon Advertising console → Campaign → Targeting tab → Export
+- 4 files per week (one per campaign). Filename pattern: `Sponsored_Products_Target*.csv`
+- **Lifetime cumulative** performance (not weekly) — only bid data is extracted
+- Two column variants: "Categories & products" (ASIN campaigns) or "Keyword" (keyword campaign)
+- Key columns not in search term report:
+  - **Bid (USD)**: actual current bid per target
+  - **Suggested bid (low/median/high)(USD)**: Amazon's recommended bid range
+  - **State**: ENABLED/PAUSED per target
+  - **Top-of-search impression share**: competitive position metric
+- The tool extracts bid + suggested bid data, enriches the targeting DataFrame, and stores in SQLite for Phase 3
 
 ### Amazon Ads — Campaign Report (CSV)
 - Campaign-level summary (one row per campaign). Optional input.
@@ -115,14 +132,14 @@ pip install -r requirements.txt
 # --week is the PULL DATE (the day you export data).
 # The report covers the 7 days before it: pull_date-7 to pull_date-1.
 # Example: 2026-02-16 → reports on Feb 9–15
-bash run-report.sh 2026-02-16 --save
+bash run-report.sh 2026-02-23 --save
 
-# Or run directly (supports multiple search term files)
+# Or run directly
 python analyze.py report \
-  --week 2026-02-16 \
-  --search-terms "data/raw/Sponsored_Products_Search_term_report.xlsx" \
-  --search-terms "data/raw/Sponsored_Products_Search_term_report (1).xlsx" \
-  --kdp "data/raw/KDP_Dashboard-*.xlsx" \
+  --week 2026-02-23 \
+  --search-terms "data/raw/Sponsored_Products_Search_term_report_2-23-26.xlsx" \
+  --kdp "data/raw/KDP_Dashboard_2-23-26.xlsx" \
+  --targeting data/raw/Sponsored_Products_Target*.csv \
   --save
 
 # View trends (requires prior --save runs)
@@ -136,7 +153,7 @@ python analyze.py lifetime
 
 See [weekly-update-workflow.md](weekly-update-workflow.md) for the full step-by-step process.
 
-Summary: Download fresh Amazon Ads Search Term Report(s) and KDP Dashboard Report ("This Month"), move them into `data/raw/`, delete old exports, then run `bash run-report.sh <pull-date> --save` where `<pull-date>` is today's date (the report looks back 7 days from it).
+Summary: Download 6 files (1-2 search term XLSX, 4 targeting CSVs, 1 KDP XLSX), archive old exports from `data/raw/` to `data/archive/`, move new files into `data/raw/`, then run `bash run-report.sh <pull-date> --save`.
 
 ## Architecture
 
@@ -146,7 +163,7 @@ config/campaigns.yaml   Campaign config, book data, timeline milestones
 data/asin_lookup.json   ASIN-to-title mapping for search term display names
 src/ingest/
   search_terms.py       Parse Amazon Search Term Report (CSV or XLSX)
-  targeting.py          Parse Campaign Report + build_targeting_from_search_terms()
+  targeting.py          Parse Campaign Report + targeting reports + build_targeting_from_search_terms()
   kdp.py                Parse KDP multi-sheet XLSX (auto-detects Dashboard vs Lifetime)
 src/analysis/
   campaign_summary.py   Campaign-level rollup + WoW comparison
@@ -168,9 +185,9 @@ src/models/             Phase 3 placeholder (Bayesian bid optimizer — not yet 
 
 ## Key Design Decisions
 
-- **No separate targeting report needed**: Per-target metrics are derived from search term report via `build_targeting_from_search_terms()`. Amazon's current export format doesn't provide a per-target breakdown as a separate report.
+- **Per-target metrics from search terms**: Weekly per-target metrics are derived from the search term report via `build_targeting_from_search_terms()`. Targeting reports supplement with bid/suggested bid data only (their performance metrics are lifetime cumulative, not weekly).
 - **Multiple search term files**: CLI accepts `--search-terms` multiple times. Files are concatenated and then deduplicated on (campaign_name, targeting, search_term, start_date, end_date) to prevent double-counting from overlapping exports.
-- **Bid enrichment from config**: Since per-target bid data isn't in the search term export, bids are mapped from `campaigns.yaml` target list.
+- **Bid enrichment from targeting reports**: CLI accepts `--targeting` multiple times (4 per-campaign CSVs). `load_targeting_reports()` parses them, `build_bid_lookup()` creates a `{targeting → bid/suggested_bids}` lookup. ENABLED rows preferred; if multiple ENABLED rows for same target (e.g. Sophia Code with exact+expanded), the one with more impressions wins. Enrichment is optional — pipeline runs without targeting reports, just without bid data.
 - **KDP auto-detection**: `load_kdp_report()` checks Combined Sales dates — daily = Dashboard report (use it directly), monthly = Lifetime report (fall back to individual royalty sheets). Format inferred from Transaction Type field.
 - **Paired purchase detection**: `_detect_paired_purchases()` uses daily eBook Orders Placed data to find same-day Book 1 + Book 2 orders within the report's week window — strong signal of ad-driven halo sales.
 - **Ad-influenced ROAS**: Compares total KDP royalty since ad start date against cumulative ad spend (sourced from saved snapshots + current week). On first run without prior snapshots, falls back to current week's spend only. Requires `--save` runs to build accurate cumulative spend history.
@@ -178,6 +195,7 @@ src/models/             Phase 3 placeholder (Bayesian bid optimizer — not yet 
 - **Analysis modules return dicts + DataFrames**: Decoupled from rendering. All analysis modules guard against empty/missing-column inputs with early returns. Phase 3 optimizer can consume same structures.
 - **Drift flag persistence**: `save_weekly_snapshot` accepts `drift_flags` from search term analysis and marks matching rows with `is_drift=1` in the `search_term_metrics` table.
 - **Column naming**: Internally uses `orders` and `sales` (not `orders_7d`/`sales_7d`) since attribution window varies (14-day in current exports).
+- **Targeting report CSV format**: Two column variants — ASIN campaigns have "Categories & products" (with `asin="..."` / `asin-expanded="..."` values), keyword campaign has "Keyword". Match type is derived from the prefix for ASINs (exact/expanded) or the "Target match type" column for keywords. The CSVs don't contain campaign names — target identity is unambiguous across campaigns (each ASIN/keyword appears in only one campaign).
 - **ASIN-to-title resolution**: Search terms that are ASINs (B0xx or 10-digit ISBNs) are resolved to book titles via `data/asin_lookup.json`. Unknown ASINs are scraped from Amazon product pages and cached to the JSON file. Controlled by `--resolve-asins/--no-resolve-asins` flag (on by default).
 - **Pull-date convention**: `--week` is the pull date (day you export data). The report looks back 7 days: `week_start = pull_date - 7`, `week_end = pull_date - 1`. The pull date is used for filenames and display titles; the lookback window is passed to KDP reconciliation and snapshot storage.
 - **KDP date filtering in snapshots**: `save_weekly_snapshot` filters KDP rows to `[week_start, week_end]` before storing to `kdp_daily_sales`. Since KDP "This Month" exports contain the full month, without filtering the same sales would be duplicated across snapshots. Boundary days (e.g., Feb 9 in both a Feb 4–10 and Feb 9–15 snapshot) may still appear twice — this is expected and harmless since analysis queries filter by date range, not by summing the raw table.
@@ -193,8 +211,8 @@ src/models/             Phase 3 placeholder (Bayesian bid optimizer — not yet 
 
 - `high_spend_no_orders`: Target with >$5 spend and 0 orders (warning)
 - `underserving`: Target with <10 impressions (info)
-- `bid_above_profitable`: Current bid exceeds max profitable bid at target ACoS (warning)
-- `bid_below_range`: Current bid is <50% of max profitable bid (info — room to increase)
+- `bid_above_profitable`: Current bid exceeds max profitable bid at target ACoS (warning). Requires targeting report data for current bid.
+- `bid_below_range`: Current bid is <50% of max profitable bid (info — room to increase). Requires targeting report data.
 - `zero_impressions`: Keyword with 0 impressions (info — bid too low)
 - `exact_match_drift`: Search term differs from targeting on exact match (warning)
 - `broad_match_expansion`: Broad match keyword expanded to unrelated term with spend (info)

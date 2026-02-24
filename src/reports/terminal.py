@@ -148,9 +148,9 @@ def render_asin_performance(result: dict) -> None:
         )
         za_table.add_column("ASIN", style="yellow")
         za_table.add_column("Title", style="yellow")
-        za_table.add_column("Configured Bid", justify="right", style="yellow")
+        za_table.add_column("Bid", justify="right", style="yellow")
         for t in zero_activity:
-            za_table.add_row(t["asin"], t["title"], _fmt_dollar(t["bid"]))
+            za_table.add_row(t["asin"], t["title"], _fmt_dollar(t.get("bid")))
         console.print(za_table)
 
     console.print()
@@ -356,6 +356,7 @@ def render_bid_recommendations(result: dict) -> None:
     table.add_column("Orders", justify="right")
     table.add_column("Conv Rate", justify="right")
     table.add_column("Current Bid", justify="right")
+    table.add_column("Suggested", justify="right")
     table.add_column("Max Bid", justify="right")
     table.add_column("Flag")
 
@@ -378,6 +379,7 @@ def render_bid_recommendations(result: dict) -> None:
             _fmt_int(row["orders"]),
             _fmt_pct(row.get("conversion_rate")),
             _fmt_dollar(row.get("current_bid")),
+            _fmt_dollar(row.get("suggested_bid")),
             _fmt_dollar(row.get("max_profitable_bid")),
             flag_text,
         )
