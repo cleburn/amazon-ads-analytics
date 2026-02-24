@@ -70,10 +70,6 @@ All campaign names are prefixed "Ascension Book2 - " in Amazon's system.
   - **Top-of-search impression share**: competitive position metric
 - The tool extracts bid + suggested bid data, enriches the targeting DataFrame, and stores in SQLite for Phase 3
 
-### Amazon Ads — Campaign Report (CSV)
-- Campaign-level summary (one row per campaign). Optional input.
-- Has different column names than search term report (e.g., "Campaign name" vs "Campaign Name")
-
 ### KDP Reports (XLSX Workbooks)
 
 There are **two types** of KDP exports, both XLSX with the same sheet names but different granularity:
@@ -163,7 +159,7 @@ config/campaigns.yaml   Campaign config, book data, timeline milestones
 data/asin_lookup.json   ASIN-to-title mapping for search term display names
 src/ingest/
   search_terms.py       Parse Amazon Search Term Report (CSV or XLSX)
-  targeting.py          Parse Campaign Report + targeting reports + build_targeting_from_search_terms()
+  targeting.py          Targeting report parser + bid lookup + build_targeting_from_search_terms()
   kdp.py                Parse KDP multi-sheet XLSX (auto-detects Dashboard vs Lifetime)
 src/analysis/
   campaign_summary.py   Campaign-level rollup + WoW comparison
@@ -186,7 +182,7 @@ src/models/             Phase 3 placeholder (Bayesian bid optimizer — not yet 
 ## Key Design Decisions
 
 - **Per-target metrics from search terms**: Weekly per-target metrics are derived from the search term report via `build_targeting_from_search_terms()`. Targeting reports supplement with bid/suggested bid data only (their performance metrics are lifetime cumulative, not weekly).
-- **Multiple search term files**: CLI accepts `--search-terms` multiple times. Files are concatenated and then deduplicated on (campaign_name, targeting, search_term, start_date, end_date) to prevent double-counting from overlapping exports.
+- **Multiple search term files**: CLI accepts `--search-terms` multiple times. Files are concatenated and then deduplicated on (campaign_name, targeting_raw, search_term, start_date, end_date) to prevent double-counting from overlapping exports. Uses `targeting_raw` (not normalized) so exact and expanded rows for the same ASIN are preserved.
 - **Bid enrichment from targeting reports**: CLI accepts `--targeting` multiple times (4 per-campaign CSVs). `load_targeting_reports()` parses them, `build_bid_lookup()` creates a `{targeting → bid/suggested_bids}` lookup. ENABLED rows preferred; if multiple ENABLED rows for same target (e.g. Sophia Code with exact+expanded), the one with more impressions wins. Enrichment is optional — pipeline runs without targeting reports, just without bid data.
 - **KDP auto-detection**: `load_kdp_report()` checks Combined Sales dates — daily = Dashboard report (use it directly), monthly = Lifetime report (fall back to individual royalty sheets). Format inferred from Transaction Type field.
 - **Paired purchase detection**: `_detect_paired_purchases()` uses daily eBook Orders Placed data to find same-day Book 1 + Book 2 orders within the report's week window — strong signal of ad-driven halo sales.
