@@ -208,6 +208,160 @@ def load_targeting_reports(filepaths: list) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
+def build_target_to_campaign_map(config: dict) -> dict:
+    """Build a mapping from normalized targeting value to campaign name.
+
+    Each ASIN/keyword appears in only one campaign, so the mapping is
+    unambiguous. Includes both active and paused targets.
+    """
+    mapping = {}
+    for _key, campaign in config.get("campaigns", {}).items():
+        name = campaign["name"]
+        for target in campaign.get("targets", []):
+            mapping[target["asin"]] = name
+        for target in campaign.get("paused_targets", []):
+            mapping[target["asin"]] = name
+        for kw in campaign.get("keywords", []):
+            mapping[kw["keyword"]] = name
+        for kw in campaign.get("paused_keywords", []):
+            mapping[kw["keyword"]] = name
+    return mapping
+
+
+def build_supplemental_targeting(
+    targeting_report_df: pd.DataFrame,
+    prior_lifetime_df: pd.DataFrame,
+    search_term_targeting_df: pd.DataFrame,
+    config: dict,
+    bid_lookup: dict = None,
+) -> pd.DataFrame:
+    """Build targeting rows for targets not in search term data.
+
+    Computes week-over-week deltas from lifetime targeting report data.
+    Only creates rows for targets absent from search_term_targeting_df.
+    This surfaces campaigns like Self Targeting and Deconstruction that
+    don't generate search term rows, as well as ASIN targets that had
+    impressions but zero clicks.
+
+    Args:
+        targeting_report_df: Full targeting report DataFrame (lifetime cumulative).
+        prior_lifetime_df: Prior week's targeting report lifetime DataFrame.
+        search_term_targeting_df: Per-target DataFrame derived from search terms.
+        config: Campaign config dict.
+        bid_lookup: Optional bid data dict from build_bid_lookup().
+
+    Returns:
+        DataFrame with supplemental targeting rows (same schema as
+        build_targeting_from_search_terms output), with an added
+        data_source column ("targeting_report_delta" or "targeting_report_lifetime").
+    """
+    if targeting_report_df.empty:
+        return pd.DataFrame()
+
+    bid_lookup = bid_lookup or {}
+    target_to_campaign = build_target_to_campaign_map(config)
+
+    # Get campaigns and targets already in search term data
+    existing_targets = set()
+    existing_campaigns = set()
+    if not search_term_targeting_df.empty:
+        existing_targets = set(search_term_targeting_df["targeting"].unique())
+        if "campaign_name" in search_term_targeting_df.columns:
+            existing_campaigns = set(search_term_targeting_df["campaign_name"].unique())
+
+    # Aggregate current lifetime by normalized targeting (sum exact + expanded)
+    current = targeting_report_df.copy()
+    current_grouped = (
+        current.groupby("targeting")
+        .agg(
+            impressions=("impressions", "sum"),
+            clicks=("clicks", "sum"),
+            spend=("spend", "sum"),
+            orders=("orders", "sum"),
+            sales=("sales", "sum"),
+        )
+        .reset_index()
+    )
+
+    # Compute deltas if prior data available
+    if prior_lifetime_df is not None and not prior_lifetime_df.empty:
+        prior_grouped = (
+            prior_lifetime_df.groupby("targeting")
+            .agg(
+                impressions=("impressions", "sum"),
+                clicks=("clicks", "sum"),
+                spend=("spend", "sum"),
+                orders=("orders", "sum"),
+                sales=("sales", "sum"),
+            )
+            .reset_index()
+        )
+
+        merged = current_grouped.merge(
+            prior_grouped, on="targeting", how="left", suffixes=("", "_prior")
+        )
+        for col in ["impressions", "clicks", "spend", "orders", "sales"]:
+            prior_col = f"{col}_prior"
+            if prior_col in merged.columns:
+                merged[col] = merged[col] - merged[prior_col].fillna(0)
+                merged[col] = merged[col].clip(lower=0)
+
+        delta = merged.drop(
+            columns=[c for c in merged.columns if c.endswith("_prior")]
+        )
+        data_source = "targeting_report_delta"
+    else:
+        delta = current_grouped
+        data_source = "targeting_report_lifetime"
+
+    # Map to campaign names via config (before filtering)
+    delta["campaign_name"] = delta["targeting"].map(target_to_campaign)
+    delta = delta.dropna(subset=["campaign_name"])
+
+    if delta.empty:
+        return pd.DataFrame()
+
+    # Only include targets for campaigns ENTIRELY absent from search term data.
+    # For campaigns that DO appear in search term data (ASIN, Keyword), their
+    # zero-click targets remain as zero_activity flags rather than inflating
+    # the campaign summary with lifetime numbers.
+    supplemental = delta[
+        ~delta["campaign_name"].isin(existing_campaigns)
+    ].copy()
+
+    if supplemental.empty:
+        return pd.DataFrame()
+
+    # Add derived metrics
+    supplemental["ctr"] = supplemental.apply(
+        lambda r: r["clicks"] / r["impressions"] if r["impressions"] > 0 else 0,
+        axis=1,
+    )
+    supplemental["cpc"] = supplemental.apply(
+        lambda r: r["spend"] / r["clicks"] if r["clicks"] > 0 else 0,
+        axis=1,
+    )
+    supplemental["acos"] = supplemental.apply(
+        lambda r: r["spend"] / r["sales"] if r["sales"] > 0 else None,
+        axis=1,
+    )
+
+    # Enrich with bid data
+    supplemental["bid"] = supplemental["targeting"].map(
+        lambda t: bid_lookup.get(t, {}).get("bid"))
+    supplemental["suggested_bid_low"] = supplemental["targeting"].map(
+        lambda t: bid_lookup.get(t, {}).get("suggested_bid_low"))
+    supplemental["suggested_bid_median"] = supplemental["targeting"].map(
+        lambda t: bid_lookup.get(t, {}).get("suggested_bid_median"))
+    supplemental["suggested_bid_high"] = supplemental["targeting"].map(
+        lambda t: bid_lookup.get(t, {}).get("suggested_bid_high"))
+
+    supplemental["data_source"] = data_source
+    supplemental["targeting_raw"] = supplemental["targeting"]
+
+    return supplemental
+
+
 def build_bid_lookup(targeting_report_df: pd.DataFrame) -> dict:
     """Build a targeting -> bid data lookup from targeting reports.
 

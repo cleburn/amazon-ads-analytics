@@ -40,6 +40,7 @@ def render_campaign_summary(result: dict) -> None:
     """Render campaign summary table to terminal."""
     df = result["table"]
     wow = result["wow_available"]
+    has_supplemental = "data_source" in df.columns and (df["data_source"] != "search_terms").any()
 
     table = Table(title="Campaign Summary", show_lines=True)
     table.add_column("Campaign", style="bold")
@@ -52,6 +53,8 @@ def render_campaign_summary(result: dict) -> None:
     table.add_column("Sales", justify="right")
     table.add_column("ACoS", justify="right")
     table.add_column("ROAS", justify="right")
+    if has_supplemental:
+        table.add_column("Source", style="dim")
 
     for _, row in df.iterrows():
         spend_str = _fmt_dollar(row["spend"])
@@ -70,7 +73,7 @@ def render_campaign_summary(result: dict) -> None:
         roas_val = row.get("roas")
         roas_str = f"{roas_val:.2f}x" if roas_val is not None and pd.notna(roas_val) else "—"
 
-        table.add_row(
+        cells = [
             row["campaign_name"],
             spend_str,
             _fmt_int(row["impressions"]),
@@ -81,9 +84,22 @@ def render_campaign_summary(result: dict) -> None:
             _fmt_dollar(row["sales"]),
             acos_str,
             roas_str,
-        )
+        ]
+        if has_supplemental:
+            source = row.get("data_source", "search_terms")
+            if source == "targeting_report_delta":
+                cells.append("delta")
+            elif source == "targeting_report_lifetime":
+                cells.append("lifetime*")
+            else:
+                cells.append("")
+
+        table.add_row(*cells)
 
     console.print(table)
+    if has_supplemental:
+        console.print("[dim]  delta = weekly activity from targeting report WoW diff. "
+                       "lifetime* = no prior snapshot — showing cumulative since campaign start.[/dim]")
     console.print()
 
 
@@ -138,19 +154,24 @@ def render_asin_performance(result: dict) -> None:
 
     console.print(table)
 
-    # Zero-activity targets (configured but absent from search term data)
+    # Zero-activity targets (configured but absent from targeting data)
     zero_activity = result.get("zero_activity_targets", [])
     if zero_activity:
         za_table = Table(
-            title="Targets with Zero Activity This Week",
+            title="Targets with No Clicks",
             show_lines=True,
             style="dim",
         )
         za_table.add_column("ASIN", style="yellow")
         za_table.add_column("Title", style="yellow")
+        za_table.add_column("Lifetime Impr", justify="right", style="yellow")
         za_table.add_column("Bid", justify="right", style="yellow")
         for t in zero_activity:
-            za_table.add_row(t["asin"], t["title"], _fmt_dollar(t.get("bid")))
+            za_table.add_row(
+                t["asin"], t["title"],
+                _fmt_int(t.get("lifetime_impressions", 0)),
+                _fmt_dollar(t.get("bid")),
+            )
         console.print(za_table)
 
     console.print()

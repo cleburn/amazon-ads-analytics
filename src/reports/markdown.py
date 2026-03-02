@@ -37,12 +37,15 @@ def _md_table(headers: list, rows: list) -> str:
 def _campaign_summary_section(result: dict) -> str:
     """Generate campaign summary markdown section."""
     df = result["table"]
+    has_supplemental = "data_source" in df.columns and (df["data_source"] != "search_terms").any()
     headers = ["Campaign", "Spend", "Impr", "Clicks", "CTR", "Avg CPC", "Orders", "Sales", "ACoS", "ROAS"]
+    if has_supplemental:
+        headers.append("Source")
     rows = []
     for _, row in df.iterrows():
         roas_val = row.get("roas")
         roas_str = f"{roas_val:.2f}x" if roas_val is not None and pd.notna(roas_val) else "—"
-        rows.append([
+        r = [
             row["campaign_name"],
             _fmt_dollar(row["spend"]),
             _fmt_int(row["impressions"]),
@@ -53,8 +56,22 @@ def _campaign_summary_section(result: dict) -> str:
             _fmt_dollar(row["sales"]),
             _fmt_pct(row.get("acos")),
             roas_str,
-        ])
-    return "## 1. Campaign Summary\n\n" + _md_table(headers, rows)
+        ]
+        if has_supplemental:
+            source = row.get("data_source", "search_terms")
+            if source == "targeting_report_delta":
+                r.append("delta")
+            elif source == "targeting_report_lifetime":
+                r.append("lifetime*")
+            else:
+                r.append("")
+        rows.append(r)
+
+    section = "## 1. Campaign Summary\n\n" + _md_table(headers, rows)
+    if has_supplemental:
+        section += "\n\n> *delta*: weekly activity derived from targeting report week-over-week difference. "
+        section += "*lifetime\\**: no prior snapshot — showing cumulative since campaign start."
+    return section
 
 
 def _asin_performance_section(result: dict) -> str:
@@ -91,11 +108,15 @@ def _asin_performance_section(result: dict) -> str:
 
     zero_activity = result.get("zero_activity_targets", [])
     if zero_activity:
-        section += "\n### Targets with Zero Activity\n\n"
-        za_headers = ["ASIN", "Title", "Bid"]
+        section += "\n### Targets with No Clicks\n\n"
+        za_headers = ["ASIN", "Title", "Lifetime Impr", "Bid"]
         za_rows = []
         for t in zero_activity:
-            za_rows.append([t["asin"], t["title"], _fmt_dollar(t.get("bid"))])
+            za_rows.append([
+                t["asin"], t["title"],
+                _fmt_int(t.get("lifetime_impressions", 0)),
+                _fmt_dollar(t.get("bid")),
+            ])
         section += _md_table(za_headers, za_rows) + "\n"
 
     return section

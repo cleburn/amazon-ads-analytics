@@ -23,13 +23,26 @@ def generate_campaign_summary(
     if targeting_df.empty or "campaign_name" not in targeting_df.columns:
         return {"table": pd.DataFrame(), "wow_available": False}
 
-    grouped = targeting_df.groupby("campaign_name").agg(
-        impressions=("impressions", "sum"),
-        clicks=("clicks", "sum"),
-        spend=("spend", "sum"),
-        sales=("sales", "sum"),
-        orders=("orders", "sum"),
-    ).reset_index()
+    agg_dict = {
+        "impressions": ("impressions", "sum"),
+        "clicks": ("clicks", "sum"),
+        "spend": ("spend", "sum"),
+        "sales": ("sales", "sum"),
+        "orders": ("orders", "sum"),
+    }
+
+    grouped = targeting_df.groupby("campaign_name").agg(**agg_dict).reset_index()
+
+    # Propagate data_source: if any row for a campaign is supplemental, label it
+    if "data_source" in targeting_df.columns:
+        source_map = (
+            targeting_df.groupby("campaign_name")["data_source"]
+            .apply(lambda x: x.iloc[0] if x.nunique() == 1 else "mixed")
+            .to_dict()
+        )
+        grouped["data_source"] = grouped["campaign_name"].map(source_map)
+    else:
+        grouped["data_source"] = "search_terms"
 
     # Compute derived metrics
     grouped["ctr"] = grouped.apply(

@@ -29,7 +29,7 @@ for f in data/raw/Sponsored_Products_Search_term_report*.xlsx; do
     [ -f "$f" ] && SEARCH_TERM_ARGS="$SEARCH_TERM_ARGS --search-terms \"$f\""
 done
 
-# 2. KDP reports (XLSX, required — may be multiple for cross-month boundaries)
+# 2. KDP reports (XLSX, required — KDP_Orders or KDP_Dashboard)
 KDP_ARGS=""
 for f in data/raw/KDP_*.xlsx; do
     [ -f "$f" ] && KDP_ARGS="$KDP_ARGS --kdp \"$f\""

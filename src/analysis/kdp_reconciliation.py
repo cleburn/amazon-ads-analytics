@@ -11,6 +11,7 @@ def reconcile_kdp_sales(
     kdp_orders_df: pd.DataFrame = None,
     config: dict = None,
     cumulative_prior_spend: float = None,
+    cumulative_kdp_df: pd.DataFrame = None,
 ) -> dict:
     """Reconcile KDP sales data against Amazon ad-attributed orders.
 
@@ -162,6 +163,7 @@ def reconcile_kdp_sales(
         total_ad_orders=total_ad_orders,
         total_ad_sales=total_ad_sales,
         cumulative_prior_spend=cumulative_prior_spend,
+        cumulative_kdp_df=cumulative_kdp_df,
     )
 
     # --- Build the comparison note ---
@@ -303,6 +305,7 @@ def _estimate_ad_influenced(
     total_ad_orders: int,
     total_ad_sales: float,
     cumulative_prior_spend: float = None,
+    cumulative_kdp_df: pd.DataFrame = None,
 ) -> dict:
     """Estimate total ad-influenced sales across all books and formats.
 
@@ -325,14 +328,40 @@ def _estimate_ad_influenced(
     ads_start = pd.to_datetime(ads_start_str)
 
     # --- Collect all post-ad KDP royalty data ---
+    # Merge cumulative DB data (all saved snapshots) with the current KDP
+    # export to include any dates not yet saved (e.g., pull-date sales).
+    # Deduplicate by (date, title, format) to avoid double-counting.
     post_ad_units = 0
     post_ad_royalty = 0.0
     pre_ad_units = 0
     pre_ad_royalty = 0.0
     post_ad_breakdown = []
 
-    if not kdp_df.empty and "date" in kdp_df.columns:
-        df = kdp_df.copy()
+    # Build comprehensive KDP dataset
+    combined_kdp = kdp_df.copy() if not kdp_df.empty else pd.DataFrame()
+
+    if cumulative_kdp_df is not None and not cumulative_kdp_df.empty:
+        # Merge DB cumulative with current export
+        if combined_kdp.empty:
+            combined_kdp = cumulative_kdp_df.copy()
+        else:
+            combined_kdp = pd.concat([cumulative_kdp_df, combined_kdp], ignore_index=True)
+        # Deduplicate: keep the row with higher royalty for any overlap
+        if "date" in combined_kdp.columns and "title" in combined_kdp.columns:
+            combined_kdp = combined_kdp.dropna(subset=["date"])
+            combined_kdp["_date_str"] = combined_kdp["date"].apply(
+                lambda d: d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)
+            )
+            units_col_tmp = "net_units_sold" if "net_units_sold" in combined_kdp.columns else "units_sold"
+            combined_kdp = (
+                combined_kdp
+                .sort_values("royalty", ascending=False)
+                .drop_duplicates(subset=["_date_str", "title", "format"], keep="first")
+                .drop(columns=["_date_str"])
+            )
+
+    if not combined_kdp.empty and "date" in combined_kdp.columns:
+        df = combined_kdp.copy()
         units_col = "net_units_sold" if "net_units_sold" in df.columns else "units_sold"
 
         # For monthly data, consider a month "post-ad" if it contains or follows the ad start

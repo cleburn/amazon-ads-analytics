@@ -17,6 +17,7 @@ def save_weekly_snapshot(
     campaign_summary: dict,
     bid_recommendations: dict,
     drift_flags: list = None,
+    targeting_report_df: pd.DataFrame = None,
     db_path: str = None,
     notes: str = None,
 ) -> int:
@@ -43,6 +44,7 @@ def save_weekly_snapshot(
                 "search_term_metrics",
                 "kdp_daily_sales",
                 "bid_recommendations",
+                "targeting_report_lifetime",
             ]:
                 cursor.execute(
                     f"DELETE FROM {child_table} WHERE snapshot_id = ?",
@@ -216,6 +218,33 @@ def save_weekly_snapshot(
                 ),
             )
 
+        # Save targeting report lifetime data (for weekly delta computation)
+        if targeting_report_df is not None and not targeting_report_df.empty:
+            for _, row in targeting_report_df.iterrows():
+                cursor.execute(
+                    """INSERT OR REPLACE INTO targeting_report_lifetime
+                       (snapshot_id, targeting, match_type, state,
+                        impressions, clicks, spend, orders, sales,
+                        bid, suggested_bid_low, suggested_bid_median,
+                        suggested_bid_high)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        snapshot_id,
+                        row.get("targeting", ""),
+                        row.get("match_type", ""),
+                        row.get("state", ""),
+                        int(row.get("impressions", 0)),
+                        int(row.get("clicks", 0)),
+                        float(row.get("spend", 0)),
+                        int(row.get("orders", 0)),
+                        float(row.get("sales", 0)),
+                        float(row["bid"]) if pd.notna(row.get("bid")) else None,
+                        float(row["suggested_bid_low"]) if pd.notna(row.get("suggested_bid_low")) else None,
+                        float(row["suggested_bid_median"]) if pd.notna(row.get("suggested_bid_median")) else None,
+                        float(row["suggested_bid_high"]) if pd.notna(row.get("suggested_bid_high")) else None,
+                    ),
+                )
+
         conn.commit()
         return snapshot_id
 
@@ -255,6 +284,93 @@ def get_prior_week_summary(
         )
 
         return df if not df.empty else None
+
+    finally:
+        conn.close()
+
+
+def get_prior_targeting_lifetime(
+    current_week: str,
+    db_path: str = None,
+) -> Optional[pd.DataFrame]:
+    """Retrieve the prior week's targeting report lifetime data.
+
+    Used to compute week-over-week deltas: current lifetime - prior
+    lifetime = this week's activity.
+    """
+    conn = get_connection(db_path)
+
+    try:
+        row = conn.execute(
+            """SELECT id FROM weekly_snapshots
+               WHERE week_start < ? ORDER BY week_start DESC LIMIT 1""",
+            (current_week,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        snapshot_id = row["id"]
+
+        df = pd.read_sql_query(
+            """SELECT targeting, match_type, state, impressions, clicks,
+                      spend, orders, sales, bid,
+                      suggested_bid_low, suggested_bid_median, suggested_bid_high
+               FROM targeting_report_lifetime WHERE snapshot_id = ?""",
+            conn,
+            params=(snapshot_id,),
+        )
+
+        return df if not df.empty else None
+
+    finally:
+        conn.close()
+
+
+def get_cumulative_kdp_data(
+    ads_start_date: str = None,
+    db_path: str = None,
+) -> Optional[pd.DataFrame]:
+    """Retrieve cumulative KDP sales from all saved snapshots.
+
+    Deduplicates by (date, title, format) across overlapping snapshots,
+    taking MAX(units, royalty) for any duplicated rows.
+
+    Args:
+        ads_start_date: Only include sales on or after this date (YYYY-MM-DD).
+        db_path: Optional database path.
+
+    Returns:
+        DataFrame with columns: date, title, format, units_sold, net_units_sold, royalty.
+        Returns None if no data is found.
+    """
+    conn = get_connection(db_path)
+
+    try:
+        where = ""
+        params = []
+        if ads_start_date:
+            where = "WHERE k.date >= ?"
+            params.append(ads_start_date)
+
+        df = pd.read_sql_query(
+            f"""SELECT k.date, k.title, k.format,
+                       MAX(k.units_sold) as units_sold,
+                       MAX(k.net_units_sold) as net_units_sold,
+                       MAX(k.royalty) as royalty
+                FROM kdp_daily_sales k
+                {where}
+                GROUP BY k.date, k.title, k.format
+                ORDER BY k.date""",
+            conn,
+            params=params,
+        )
+
+        if df.empty:
+            return None
+
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        return df
 
     finally:
         conn.close()

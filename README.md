@@ -29,7 +29,7 @@ data/asin_lookup.json       ASIN-to-title mapping for search term display names
 
 src/ingest/
   search_terms.py           Parse Amazon Search Term Report (CSV or XLSX)
-  targeting.py              Targeting report parser + bid lookup + target aggregation from search terms
+  targeting.py              Targeting report parser + bid lookup + supplemental targeting deltas
   kdp.py                    Parse KDP multi-sheet XLSX workbook
 
 src/analysis/
@@ -48,8 +48,8 @@ src/reports/
   markdown.py               Markdown file writer
 
 src/storage/
-  database.py               SQLite schema (6 tables)
-  snapshots.py              Save/retrieve weekly snapshots, trend queries
+  database.py               SQLite schema (7 tables)
+  snapshots.py              Save/retrieve weekly snapshots, targeting lifetime, trend queries
 ```
 
 ## Key Metrics
@@ -64,9 +64,9 @@ src/storage/
 ## Data Sources
 
 - **Amazon Ads Search Term Report** (XLSX) — primary weekly performance data, one row per search term per target per day
-- **Amazon Ads Targeting Reports** (CSV, 4 per week) — per-campaign exports with actual bids, Amazon's suggested bid ranges, and target state. Lifetime cumulative; only bid data is extracted
-- **KDP Dashboard Report** (XLSX, 1-2 per week) — daily sales granularity for all formats. Multiple files accepted for cross-month boundaries
-- **KDP Orders/Lifetime Report** (XLSX) — monthly granularity; used for historical context. Auto-detected by the tool
+- **Amazon Ads Targeting Reports** (CSV, 4 per week) — per-campaign exports with actual bids, Amazon's suggested bid ranges, and target state. Lifetime cumulative; bid data extracted for enrichment, full data saved for weekly delta computation
+- **KDP Orders Report** (XLSX, preferred) — exported from KDP Reports → Orders with a custom date range. Daily granularity, all formats. Single file covers the full period
+- **KDP Dashboard Report** (XLSX, alternative) — exported from KDP Dashboard → "This Month." Same daily data, but limited to current month (may need multiple files for cross-month boundaries)
 - **ASIN Lookup** (`data/asin_lookup.json`) — maps competitor ASINs to book titles. Unknown ASINs auto-scraped from Amazon and cached
 
 Raw data files are gitignored. Exports are held in `data/raw/` to run reports, then moved to `data/archive/`
@@ -84,6 +84,7 @@ Raw data files are gitignored. Exports are held in `data/raw/` to run reports, t
 | `zero_impressions` | Info | Keyword getting 0 impressions |
 | `zero_activity` | Info | Configured target absent from search term data |
 | `no_conversions` | Info | Clicks but 0 orders |
+| `impressions_no_clicks` | Info | Ad showing but not generating clicks |
 | `no_data` | Info | No impressions or clicks |
 
 ## Project Phases

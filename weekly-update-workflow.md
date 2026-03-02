@@ -25,10 +25,12 @@ You need **6+ files** each week: 1-2 search term reports, 1-2 KDP reports, and 4
 
 > **Note:** Targeting reports are lifetime cumulative. The pipeline extracts bid/suggested bid data only — weekly performance comes from the search term report.
 
-### KDP Dashboard Report(s)
-1. Go to **KDP Dashboard** → select **This Month** → Download
-2. This gives daily granularity for all formats (Kindle + paperback)
-3. **Cross-month boundaries**: If the reporting period spans two months (e.g., Feb 24 – Mar 2), download "This Month" for **both** months — the tool accepts multiple `--kdp` files, concatenates them, and deduplicates overlapping rows
+### KDP Sales Report
+1. Go to **KDP Reports** → **Orders** → set a custom date range covering the reporting period (e.g., Feb 23 – Mar 2) → **Generate Report** → Download
+2. This gives daily granularity for all formats (Kindle + paperback) in a single file
+3. Extra days outside the reporting window are harmlessly filtered out by the tool
+
+> **Alternative**: KDP Dashboard → "This Month" also works, but is limited to the current month. The Orders report with a custom date range is preferred since a single file covers any period.
 
 ### Move Files into the Project
 
@@ -49,7 +51,7 @@ mv ~/Downloads/* data/raw/
 | # | File Pattern | Format | Source |
 |---|-------------|--------|--------|
 | 1+ | `Sponsored_Products_Search_term_report*.xlsx` | XLSX | Amazon Ads Console |
-| 2+ | `KDP_Dash*.xlsx` | XLSX | KDP Dashboard (1-2 files) |
+| 2 | `KDP_Orders*.xlsx` or `KDP_Dash*.xlsx` | XLSX | KDP Reports → Orders (preferred) |
 | 3-6 | `Sponsored_Products_Target*.csv` | CSV | Amazon Ads Console (1 per campaign) |
 
 ---
@@ -58,10 +60,10 @@ mv ~/Downloads/* data/raw/
 
 ```bash
 cd ~/repos/amazon-ads-analytics
-bash run-report.sh 2026-02-23 --save
+bash run-report.sh 2026-03-02 --save
 ```
 
-Replace the date with today's date (the pull date). The report automatically covers the 7 days before it (e.g., `2026-02-23` → reports on Feb 16–22).
+Replace the date with today's date (the pull date). The report automatically covers the 7 days before it (e.g., `2026-03-02` → reports on Feb 23 – Mar 1).
 
 - The script auto-discovers all files in `data/raw/` by pattern
 - Targeting reports are optional — if absent, bid enrichment is skipped

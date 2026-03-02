@@ -49,7 +49,7 @@ All campaign names are prefixed "Ascension Book2 - " in Amazon's system.
 
 ## Data Sources & Formats
 
-6+ files are ingested weekly: 1-2 search term reports (XLSX), 4 targeting reports (CSV), 1-2 KDP reports (XLSX). Multiple KDP files are needed when the reporting period spans a month boundary (e.g., two "This Month" exports for Feb and March).
+6 files are ingested weekly: 1 search term report (XLSX), 4 targeting reports (CSV), 1 KDP report (XLSX). Multiple files of each type are accepted if needed (e.g., split search term exports or cross-month KDP Dashboard exports).
 
 ### Amazon Ads — Search Term Reports (XLSX)
 - Exported from Amazon Advertising console, possibly split across multiple files by date range
@@ -61,37 +61,31 @@ All campaign names are prefixed "Ascension Book2 - " in Amazon's system.
 ### Amazon Ads — Targeting Reports (CSV, 1 per campaign)
 - Exported from Amazon Advertising console → Campaign → Targeting tab → Export
 - 4 files per week (one per campaign). Filename pattern: `Sponsored_Products_Target*.csv`
-- **Lifetime cumulative** performance (not weekly) — only bid data is extracted
+- **Lifetime cumulative** performance (not weekly)
 - Two column variants: "Categories & products" (ASIN campaigns) or "Keyword" (keyword campaign)
 - Key columns not in search term report:
   - **Bid (USD)**: actual current bid per target
   - **Suggested bid (low/median/high)(USD)**: Amazon's recommended bid range
   - **State**: ENABLED/PAUSED per target
   - **Top-of-search impression share**: competitive position metric
-- The tool extracts bid + suggested bid data, enriches the targeting DataFrame, and stores in SQLite for Phase 3
+- The tool extracts bid + suggested bid data for enrichment, and saves full lifetime data to `targeting_report_lifetime` table for weekly delta computation (supplemental targeting)
 
 ### KDP Reports (XLSX Workbooks)
 
-There are **two types** of KDP exports, both XLSX with the same sheet names but different granularity:
+There are **two types** of KDP exports, both XLSX with the same sheet names. When configured for daily date ranges, they produce **identical** output:
 
-#### KDP Dashboard Report (preferred for weekly analysis)
-- Exported from KDP Dashboard → Download. Date options: Today, Yesterday, **This Month** (use this one)
-- Filename pattern: `KDP_Dashboard-*.xlsx`
-- **Combined Sales** sheet: **DAILY** dates, ALL formats, with royalty — the primary data source
-- **Orders Processed** sheet: **DAILY** dates, all formats, with ASIN
-- **Paperback Royalty** sheet: **DAILY** royalty date + order date
-- **eBook Orders Placed** sheet: **DAILY** ebook orders (last 90 days only)
-- The tool reads Combined Sales first when daily data is detected
-- Only covers the selected period (e.g., current month), not lifetime
-
-#### KDP Orders Report (for historical/lifetime context)
-- Exported from KDP Reports → Orders. Can select Lifetime or custom date range
+#### KDP Orders Report (preferred — custom date range)
+- Exported from KDP Reports → Orders. Select a custom date range covering the reporting period
 - Filename pattern: `KDP_Orders-*.xlsx`
-- **Combined Sales** sheet: **MONTHLY** dates (YYYY-MM)
-- **Royalty sheets**: **MONTHLY**
-- **eBook Orders Placed** sheet: **DAILY** (only ebooks, last 90 days)
-- The tool falls back to individual royalty sheets when Combined Sales is monthly
-- Contains full sales history — useful for ad-influenced analysis across the entire ad period
+- With a short date range: **DAILY** dates, identical structure to Dashboard report
+- With "Lifetime" range: **MONTHLY** dates — tool falls back to individual royalty sheets
+- **Preferred** because you control the exact date range (no need for multiple "This Month" exports across month boundaries)
+
+#### KDP Dashboard Report (alternative)
+- Exported from KDP Dashboard → Download. Date options: Today, Yesterday, **This Month**
+- Filename pattern: `KDP_Dashboard-*.xlsx` or `KDP_Dashboard_*.xlsx`
+- **DAILY** dates, ALL formats, with royalty
+- Only covers the selected period (e.g., current month) — requires multiple files for cross-month boundaries
 
 #### Auto-Detection Logic (`src/ingest/kdp.py`)
 The tool auto-detects which report type by checking dates in Combined Sales:
@@ -99,8 +93,8 @@ The tool auto-detects which report type by checking dates in Combined Sales:
 - If all dates are 1st-of-month → Orders/Lifetime report → fall back to individual royalty sheets
 
 #### Key Sheets Reference
-| Sheet | Dashboard Report | Orders/Lifetime Report | What It Contains |
-|-------|-----------------|----------------------|------------------|
+| Sheet | Daily Export | Lifetime Export | What It Contains |
+|-------|------------|----------------|------------------|
 | Combined Sales | DAILY, all formats | MONTHLY, all formats | Royalty date, title, ASIN/ISBN, units, royalty. Format inferred from Transaction Type: "Standard" = ebook, "Standard - Paperback" = paperback |
 | Orders Processed | DAILY | MONTHLY | Date, title, ASIN, paid/free units. ASIN distinguishes format (B0... = ebook, 979... = paperback) |
 | Paperback Royalty | DAILY (has Order Date) | MONTHLY | Royalty date, order date, ISBN, ASIN, units, royalty |
@@ -128,14 +122,13 @@ pip install -r requirements.txt
 # --week is the PULL DATE (the day you export data).
 # The report covers the 7 days before it: pull_date-7 to pull_date-1.
 # Example: 2026-02-16 → reports on Feb 9–15
-bash run-report.sh 2026-02-23 --save
+bash run-report.sh 2026-03-02 --save
 
-# Or run directly (--kdp can be specified multiple times for cross-month boundaries)
+# Or run directly
 python analyze.py report \
   --week 2026-03-02 \
-  --search-terms "data/raw/Sponsored_Products_Search_term_report_3-2-26.xlsx" \
-  --kdp "data/raw/KDP_Dashboard_Feb_2026.xlsx" \
-  --kdp "data/raw/KDP_Dashboard_Mar_2026.xlsx" \
+  --search-terms "data/raw/Sponsored_Products_Search_term_report_03-02-2026.xlsx" \
+  --kdp "data/raw/KDP_Orders_03-02-2026.xlsx" \
   --targeting data/raw/Sponsored_Products_Target*.csv \
   --save
 
@@ -150,7 +143,7 @@ python analyze.py lifetime
 
 See [weekly-update-workflow.md](weekly-update-workflow.md) for the full step-by-step process.
 
-Summary: Download 6 files (1-2 search term XLSX, 4 targeting CSVs, 1 KDP XLSX), archive old exports from `data/raw/` to `data/archive/`, move new files into `data/raw/`, then run `bash run-report.sh <pull-date> --save`.
+Summary: Download 6 files (1 search term XLSX, 4 targeting CSVs, 1 KDP Orders XLSX), archive old exports from `data/raw/` to `data/archive/`, move new files into `data/raw/`, then run `bash run-report.sh <pull-date> --save`.
 
 ## Architecture
 
@@ -160,7 +153,7 @@ config/campaigns.yaml   Campaign config, book data, timeline milestones
 data/asin_lookup.json   ASIN-to-title mapping for search term display names
 src/ingest/
   search_terms.py       Parse Amazon Search Term Report (CSV or XLSX)
-  targeting.py          Targeting report parser + bid lookup + build_targeting_from_search_terms()
+  targeting.py          Targeting report parser + bid lookup + supplemental targeting deltas
   kdp.py                Parse KDP multi-sheet XLSX (auto-detects Dashboard vs Lifetime)
 src/analysis/
   campaign_summary.py   Campaign-level rollup + WoW comparison
@@ -175,20 +168,21 @@ src/reports/
   terminal.py           Rich console output (tables, panels, color-coded flags)
   markdown.py           Markdown file writer (reports/week-YYYY-MM-DD.md)
 src/storage/
-  database.py           SQLite schema (6 tables), connection management
-  snapshots.py          Save/retrieve weekly snapshots, trend queries, lifetime stats
+  database.py           SQLite schema (7 tables), connection management
+  snapshots.py          Save/retrieve weekly snapshots, targeting lifetime, trend queries
 src/models/             Phase 3 placeholder (Bayesian bid optimizer — not yet built)
 ```
 
 ## Key Design Decisions
 
-- **Per-target metrics from search terms**: Weekly per-target metrics are derived from the search term report via `build_targeting_from_search_terms()`. Targeting reports supplement with bid/suggested bid data only (their performance metrics are lifetime cumulative, not weekly).
+- **Per-target metrics from search terms**: Weekly per-target metrics are derived from the search term report via `build_targeting_from_search_terms()`. Targeting reports supplement with bid/suggested bid data and provide lifetime data for supplemental targeting.
+- **Supplemental targeting**: Campaigns absent from search term data (Self Targeting, Deconstruction) are surfaced via `build_supplemental_targeting()`. On the first run, lifetime cumulative values are shown (labeled "lifetime*"). On subsequent runs with saved snapshots, weekly deltas are computed (current lifetime - prior lifetime = this week's activity). Only campaigns entirely absent from search terms are supplemented — campaigns with partial search term data (ASIN, Keyword) are not inflated with lifetime numbers.
 - **Multiple search term files**: CLI accepts `--search-terms` multiple times. Files are concatenated and then deduplicated on (campaign_name, targeting_raw, search_term, start_date, end_date) to prevent double-counting from overlapping exports. Uses `targeting_raw` (not normalized) so exact and expanded rows for the same ASIN are preserved.
 - **Bid enrichment from targeting reports**: CLI accepts `--targeting` multiple times (4 per-campaign CSVs). `load_targeting_reports()` parses them, `build_bid_lookup()` creates a `{targeting → bid/suggested_bids}` lookup. ENABLED rows preferred; if multiple ENABLED rows for same target (e.g. Sophia Code with exact+expanded), the one with more impressions wins. Enrichment is optional — pipeline runs without targeting reports, just without bid data.
 - **Multiple KDP files**: CLI accepts `--kdp` multiple times (needed for cross-month boundaries, e.g., Feb + March "This Month" exports). Files are loaded individually, concatenated, and deduplicated on (date, title, format, marketplace, units_sold, royalty). Daily orders data is also concatenated and deduplicated on (date, title, format, asin). Downstream date filtering to `[week_start, week_end]` ensures only the relevant window is analyzed/stored.
 - **KDP auto-detection**: `load_kdp_report()` checks Combined Sales dates — daily = Dashboard report (use it directly), monthly = Lifetime report (fall back to individual royalty sheets). Format inferred from Transaction Type field.
 - **Paired purchase detection**: `_detect_paired_purchases()` uses daily eBook Orders Placed data to find same-day Book 1 + Book 2 orders within the report's week window — strong signal of ad-driven halo sales.
-- **Ad-influenced ROAS**: Compares total KDP royalty since ad start date against cumulative ad spend (sourced from saved snapshots + current week). On first run without prior snapshots, falls back to current week's spend only. Requires `--save` runs to build accurate cumulative spend history.
+- **Ad-influenced ROAS**: Compares total KDP royalty since ad start date against cumulative ad spend. Both KDP royalty and ad spend are sourced from saved snapshots (deduped by date/title/format to handle overlapping windows) merged with the current week's data. On first run without prior snapshots, falls back to current export only. Requires `--save` runs to build accurate cumulative history.
 - **SQLite opt-in**: `--save` flag. Phase 1 works standalone without a database.
 - **Analysis modules return dicts + DataFrames**: Decoupled from rendering. All analysis modules guard against empty/missing-column inputs with early returns. Phase 3 optimizer can consume same structures.
 - **Drift flag persistence**: `save_weekly_snapshot` accepts `drift_flags` from search term analysis and marks matching rows with `is_drift=1` in the `search_term_metrics` table.
@@ -215,6 +209,7 @@ src/models/             Phase 3 placeholder (Bayesian bid optimizer — not yet 
 - `exact_match_drift`: Search term differs from targeting on exact match (warning)
 - `broad_match_expansion`: Broad match keyword expanded to unrelated term with spend (info)
 - `no_conversions`: Target with clicks but 0 orders (info)
+- `impressions_no_clicks`: Target with impressions but 0 clicks — ad showing but not engaging (info)
 - `no_data`: Target with 0 impressions and 0 clicks (info)
 
 ## Phases

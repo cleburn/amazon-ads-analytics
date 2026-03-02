@@ -64,7 +64,8 @@ def recommend_bids(
         clicks = row.get("clicks", 0)
 
         if clicks == 0:
-            if row.get("impressions", 0) == 0:
+            impr = row.get("impressions", 0)
+            if impr == 0:
                 flags.append({
                     "type": "no_data",
                     "severity": "info",
@@ -74,6 +75,20 @@ def recommend_bids(
                     "suggested_bid": suggested_bid,
                     "recommended_bid": None,
                     "message": "No impressions or clicks — insufficient data for bid recommendation",
+                })
+            else:
+                flags.append({
+                    "type": "impressions_no_clicks",
+                    "severity": "info",
+                    "target": target,
+                    "campaign": campaign,
+                    "current_bid": current_bid,
+                    "suggested_bid": suggested_bid,
+                    "recommended_bid": None,
+                    "message": (
+                        f"{impr:,} impressions but 0 clicks — "
+                        "ad is showing but not generating engagement"
+                    ),
                 })
             continue
 

@@ -92,6 +92,24 @@ CREATE TABLE IF NOT EXISTS bid_recommendations (
     conversion_rate REAL,
     flag TEXT
 );
+
+CREATE TABLE IF NOT EXISTS targeting_report_lifetime (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL REFERENCES weekly_snapshots(id),
+    targeting TEXT NOT NULL,
+    match_type TEXT,
+    state TEXT,
+    impressions INTEGER,
+    clicks INTEGER,
+    spend REAL,
+    orders INTEGER,
+    sales REAL,
+    bid REAL,
+    suggested_bid_low REAL,
+    suggested_bid_median REAL,
+    suggested_bid_high REAL,
+    UNIQUE(snapshot_id, targeting, match_type)
+);
 """
 
 # Migration queries for existing databases that lack new columns.

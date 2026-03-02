@@ -9,7 +9,10 @@ import pandas as pd
 import yaml
 
 from src.ingest.search_terms import load_search_term_report
-from src.ingest.targeting import build_targeting_from_search_terms, load_targeting_reports, build_bid_lookup
+from src.ingest.targeting import (
+    build_targeting_from_search_terms, load_targeting_reports,
+    build_bid_lookup, build_supplemental_targeting,
+)
 from src.ingest.kdp import load_kdp_report, load_kdp_orders
 from src.analysis.campaign_summary import generate_campaign_summary
 from src.analysis.asin_performance import analyze_asin_targets
@@ -103,6 +106,7 @@ def report(week, search_terms_paths, kdp_paths, targeting_paths,
 
     # Enrich targeting_df with bid + suggested bid data from targeting reports
     bid_lookup = {}
+    targeting_report_df = pd.DataFrame()
     if targeting_paths:
         targeting_report_df = load_targeting_reports(list(targeting_paths))
         click.echo(f"  Targeting reports: {len(targeting_report_df)} rows from {len(targeting_paths)} files")
@@ -118,6 +122,39 @@ def report(week, search_terms_paths, kdp_paths, targeting_paths,
                 lambda t: bid_lookup.get(t, {}).get("suggested_bid_high"))
             enriched = targeting_df["bid"].notna().sum()
             click.echo(f"  Bid enrichment: {enriched}/{len(targeting_df)} targets matched")
+
+    # Build supplemental targeting from targeting report deltas
+    # (captures campaigns/targets not in search term data)
+    if not targeting_report_df.empty:
+        prior_lifetime_df = None
+        try:
+            from src.storage.snapshots import get_prior_targeting_lifetime
+            prior_lifetime_df = get_prior_targeting_lifetime(week_start_str)
+            if prior_lifetime_df is not None:
+                click.echo(f"  Prior targeting lifetime: {len(prior_lifetime_df)} rows (delta mode)")
+            else:
+                click.echo("  No prior targeting lifetime data (first run — using lifetime values)")
+        except ImportError:
+            pass
+        except Exception as e:
+            click.echo(f"  Warning: Could not load prior targeting lifetime: {e}")
+
+        supplemental = build_supplemental_targeting(
+            targeting_report_df=targeting_report_df,
+            prior_lifetime_df=prior_lifetime_df,
+            search_term_targeting_df=targeting_df,
+            config=config,
+            bid_lookup=bid_lookup,
+        )
+        if not supplemental.empty:
+            # Mark existing search-term rows
+            if "data_source" not in targeting_df.columns:
+                targeting_df["data_source"] = "search_terms"
+            targeting_df = pd.concat([targeting_df, supplemental], ignore_index=True)
+            source = supplemental["data_source"].iloc[0]
+            click.echo(
+                f"  Supplemental targeting: {len(supplemental)} targets added ({source})"
+            )
 
     # KDP sales (may be multiple files for cross-month boundaries)
     kdp_frames = []
@@ -178,16 +215,34 @@ def report(week, search_terms_paths, kdp_paths, targeting_paths,
     except Exception as e:
         click.echo(f"  Warning: Could not load cumulative ad spend: {e}")
 
+    # Try to load cumulative KDP data from all saved snapshots
+    cumulative_kdp_df = None
+    try:
+        from src.storage.snapshots import get_cumulative_kdp_data
+        ads_start = config.get("timeline", {}).get("amazon_ads_start")
+        cumulative_kdp_df = get_cumulative_kdp_data(ads_start_date=ads_start)
+        if cumulative_kdp_df is not None:
+            click.echo(f"  Cumulative KDP (from DB): {len(cumulative_kdp_df)} rows, "
+                       f"{cumulative_kdp_df['net_units_sold'].sum()} units")
+    except ImportError:
+        pass
+    except Exception as e:
+        click.echo(f"  Warning: Could not load cumulative KDP data: {e}")
+
     # Analysis
     click.echo("Running analysis...")
     campaign_summary = generate_campaign_summary(targeting_df, prior_week_df)
-    asin_performance = analyze_asin_targets(targeting_df, config, bid_lookup=bid_lookup)
+    asin_performance = analyze_asin_targets(
+        targeting_df, config, bid_lookup=bid_lookup,
+        targeting_report_df=targeting_report_df if not targeting_report_df.empty else None,
+    )
     keyword_performance = analyze_keywords(targeting_df, config)
     search_term_analysis = analyze_search_terms(search_term_df, config)
     kdp_recon = reconcile_kdp_sales(
         kdp_df, campaign_summary, week_start_str, week_end_str,
         kdp_orders_df=kdp_orders_df, config=config,
         cumulative_prior_spend=cumulative_prior_spend,
+        cumulative_kdp_df=cumulative_kdp_df,
     )
     bid_recs = recommend_bids(targeting_df, config)
 
@@ -248,6 +303,7 @@ def report(week, search_terms_paths, kdp_paths, targeting_paths,
                 campaign_summary=campaign_summary,
                 bid_recommendations=bid_recs,
                 drift_flags=search_term_analysis.get("drift_flags", []),
+                targeting_report_df=targeting_report_df if not targeting_report_df.empty else None,
             )
             click.echo("Snapshot saved to database.")
         except ImportError:

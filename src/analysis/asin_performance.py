@@ -8,6 +8,7 @@ def analyze_asin_targets(
     targeting_df: pd.DataFrame,
     config: dict,
     bid_lookup: dict = None,
+    targeting_report_df: pd.DataFrame = None,
 ) -> dict:
     """Analyze ASIN-targeting campaign performance.
 
@@ -94,25 +95,43 @@ def analyze_asin_targets(
                     "message": f"Only {row['impressions']} impressions (bid may be too low)",
                 })
 
-    # Detect zero-activity targets: configured but absent from search term data
+    # Build lifetime impression lookup from targeting reports (if available)
+    lifetime_impressions = {}
+    if targeting_report_df is not None and not targeting_report_df.empty:
+        for _, row in targeting_report_df.iterrows():
+            t = row.get("targeting", "")
+            # Sum across match types (exact + expanded) for same ASIN
+            lifetime_impressions[t] = lifetime_impressions.get(t, 0) + int(row.get("impressions", 0))
+
+    # Detect zero-activity targets: configured but absent from targeting data
+    # Targets may now appear in df via supplemental targeting report data
     active_asins = set(df["targeting"].unique()) if not df.empty else set()
     for asin, info in target_lookup.items():
         if asin not in active_asins:
             bid_data = bid_lookup.get(asin, {})
+            lt_impr = lifetime_impressions.get(asin, 0)
             zero_activity_targets.append({
                 "asin": asin,
                 "title": info["title"],
                 "bid": bid_data.get("bid"),
+                "lifetime_impressions": lt_impr,
             })
+            if lt_impr > 0:
+                msg = (
+                    f"{info['title'] or asin} ({asin}): "
+                    f"No search term activity — {lt_impr:,} lifetime impressions, 0 clicks"
+                )
+            else:
+                msg = (
+                    f"{info['title'] or asin} ({asin}): "
+                    f"No impressions this week"
+                )
             flags.append({
                 "type": "zero_activity",
                 "severity": "info",
                 "target": asin,
                 "title": info["title"] or asin,
-                "message": (
-                    f"{info['title'] or asin} ({asin}): "
-                    f"No activity this week — not appearing in search term data"
-                ),
+                "message": msg,
             })
 
     return {"table": df, "flags": flags, "zero_activity_targets": zero_activity_targets}
