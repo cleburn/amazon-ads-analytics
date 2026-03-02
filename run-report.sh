@@ -29,9 +29,9 @@ for f in data/raw/Sponsored_Products_Search_term_report*.xlsx; do
     [ -f "$f" ] && SEARCH_TERM_ARGS="$SEARCH_TERM_ARGS --search-terms \"$f\""
 done
 
-# 2. KDP Dashboard reports (XLSX, required — may be multiple for cross-month boundaries)
+# 2. KDP reports (XLSX, required — may be multiple for cross-month boundaries)
 KDP_ARGS=""
-for f in data/raw/KDP_Dash*.xlsx; do
+for f in data/raw/KDP_*.xlsx; do
     [ -f "$f" ] && KDP_ARGS="$KDP_ARGS --kdp \"$f\""
 done
 
@@ -47,7 +47,7 @@ if [ -z "$SEARCH_TERM_ARGS" ]; then
 fi
 
 if [ -z "$KDP_ARGS" ]; then
-    echo "Error: No KDP Dashboard file(s) found in data/raw/"
+    echo "Error: No KDP file(s) found in data/raw/"
     exit 1
 fi
 
