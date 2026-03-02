@@ -5,6 +5,17 @@ from datetime import datetime
 
 import pandas as pd
 
+from src.ingest.targeting import DATA_SOURCE_SEARCH_TERMS, DATA_SOURCE_DELTA, DATA_SOURCE_LIFETIME
+
+
+def _data_source_label(source: str) -> str:
+    """Convert a data_source value to a display label."""
+    if source == DATA_SOURCE_DELTA:
+        return "delta"
+    elif source == DATA_SOURCE_LIFETIME:
+        return "lifetime*"
+    return ""
+
 
 def _fmt_pct(val, decimals=2) -> str:
     if val is None or pd.isna(val):
@@ -37,7 +48,7 @@ def _md_table(headers: list, rows: list) -> str:
 def _campaign_summary_section(result: dict) -> str:
     """Generate campaign summary markdown section."""
     df = result["table"]
-    has_supplemental = "data_source" in df.columns and (df["data_source"] != "search_terms").any()
+    has_supplemental = "data_source" in df.columns and (df["data_source"] != DATA_SOURCE_SEARCH_TERMS).any()
     headers = ["Campaign", "Spend", "Impr", "Clicks", "CTR", "Avg CPC", "Orders", "Sales", "ACoS", "ROAS"]
     if has_supplemental:
         headers.append("Source")
@@ -58,13 +69,7 @@ def _campaign_summary_section(result: dict) -> str:
             roas_str,
         ]
         if has_supplemental:
-            source = row.get("data_source", "search_terms")
-            if source == "targeting_report_delta":
-                r.append("delta")
-            elif source == "targeting_report_lifetime":
-                r.append("lifetime*")
-            else:
-                r.append("")
+            r.append(_data_source_label(row.get("data_source", DATA_SOURCE_SEARCH_TERMS)))
         rows.append(r)
 
     section = "## 1. Campaign Summary\n\n" + _md_table(headers, rows)

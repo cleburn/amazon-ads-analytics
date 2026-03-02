@@ -7,6 +7,9 @@ from rich.text import Text
 
 import pandas as pd
 
+from src.ingest.targeting import DATA_SOURCE_SEARCH_TERMS
+from src.reports.markdown import _data_source_label
+
 console = Console()
 
 
@@ -40,7 +43,7 @@ def render_campaign_summary(result: dict) -> None:
     """Render campaign summary table to terminal."""
     df = result["table"]
     wow = result["wow_available"]
-    has_supplemental = "data_source" in df.columns and (df["data_source"] != "search_terms").any()
+    has_supplemental = "data_source" in df.columns and (df["data_source"] != DATA_SOURCE_SEARCH_TERMS).any()
 
     table = Table(title="Campaign Summary", show_lines=True)
     table.add_column("Campaign", style="bold")
@@ -86,13 +89,7 @@ def render_campaign_summary(result: dict) -> None:
             roas_str,
         ]
         if has_supplemental:
-            source = row.get("data_source", "search_terms")
-            if source == "targeting_report_delta":
-                cells.append("delta")
-            elif source == "targeting_report_lifetime":
-                cells.append("lifetime*")
-            else:
-                cells.append("")
+            cells.append(_data_source_label(row.get("data_source", DATA_SOURCE_SEARCH_TERMS)))
 
         table.add_row(*cells)
 

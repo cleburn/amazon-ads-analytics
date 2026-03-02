@@ -255,6 +255,16 @@ def save_weekly_snapshot(
         conn.close()
 
 
+def _get_prior_snapshot_id(conn, current_week: str) -> Optional[int]:
+    """Find the most recent snapshot ID before the given week."""
+    row = conn.execute(
+        """SELECT id FROM weekly_snapshots
+           WHERE week_start < ? ORDER BY week_start DESC LIMIT 1""",
+        (current_week,),
+    ).fetchone()
+    return row["id"] if row else None
+
+
 def get_prior_week_summary(
     current_week: str,
     db_path: str = None,
@@ -263,17 +273,9 @@ def get_prior_week_summary(
     conn = get_connection(db_path)
 
     try:
-        # Find the most recent snapshot before current_week
-        row = conn.execute(
-            """SELECT id FROM weekly_snapshots
-               WHERE week_start < ? ORDER BY week_start DESC LIMIT 1""",
-            (current_week,),
-        ).fetchone()
-
-        if not row:
+        snapshot_id = _get_prior_snapshot_id(conn, current_week)
+        if snapshot_id is None:
             return None
-
-        snapshot_id = row["id"]
 
         df = pd.read_sql_query(
             """SELECT campaign_name, impressions, clicks, spend, sales,
@@ -301,16 +303,9 @@ def get_prior_targeting_lifetime(
     conn = get_connection(db_path)
 
     try:
-        row = conn.execute(
-            """SELECT id FROM weekly_snapshots
-               WHERE week_start < ? ORDER BY week_start DESC LIMIT 1""",
-            (current_week,),
-        ).fetchone()
-
-        if not row:
+        snapshot_id = _get_prior_snapshot_id(conn, current_week)
+        if snapshot_id is None:
             return None
-
-        snapshot_id = row["id"]
 
         df = pd.read_sql_query(
             """SELECT targeting, match_type, state, impressions, clicks,

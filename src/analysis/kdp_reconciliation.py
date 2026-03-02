@@ -337,28 +337,22 @@ def _estimate_ad_influenced(
     pre_ad_royalty = 0.0
     post_ad_breakdown = []
 
-    # Build comprehensive KDP dataset
-    combined_kdp = kdp_df.copy() if not kdp_df.empty else pd.DataFrame()
-
+    # Build comprehensive KDP dataset: merge DB cumulative with current export,
+    # deduplicate by (date, title, format) to avoid double-counting overlaps.
     if cumulative_kdp_df is not None and not cumulative_kdp_df.empty:
-        # Merge DB cumulative with current export
-        if combined_kdp.empty:
-            combined_kdp = cumulative_kdp_df.copy()
+        if kdp_df.empty:
+            combined_kdp = cumulative_kdp_df
         else:
-            combined_kdp = pd.concat([cumulative_kdp_df, combined_kdp], ignore_index=True)
-        # Deduplicate: keep the row with higher royalty for any overlap
-        if "date" in combined_kdp.columns and "title" in combined_kdp.columns:
-            combined_kdp = combined_kdp.dropna(subset=["date"])
-            combined_kdp["_date_str"] = combined_kdp["date"].apply(
-                lambda d: d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)
-            )
-            units_col_tmp = "net_units_sold" if "net_units_sold" in combined_kdp.columns else "units_sold"
-            combined_kdp = (
-                combined_kdp
-                .sort_values("royalty", ascending=False)
-                .drop_duplicates(subset=["_date_str", "title", "format"], keep="first")
-                .drop(columns=["_date_str"])
-            )
+            combined_kdp = pd.concat([cumulative_kdp_df, kdp_df], ignore_index=True)
+        combined_kdp = combined_kdp.dropna(subset=["date"])
+        combined_kdp["date"] = pd.to_datetime(combined_kdp["date"])
+        combined_kdp = (
+            combined_kdp
+            .sort_values("royalty", ascending=False)
+            .drop_duplicates(subset=["date", "title", "format"], keep="first")
+        )
+    else:
+        combined_kdp = kdp_df if not kdp_df.empty else pd.DataFrame()
 
     if not combined_kdp.empty and "date" in combined_kdp.columns:
         df = combined_kdp.copy()

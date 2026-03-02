@@ -4,6 +4,8 @@ from typing import Optional
 
 import pandas as pd
 
+from src.ingest.targeting import _METRIC_AGG, DATA_SOURCE_SEARCH_TERMS
+
 
 def generate_campaign_summary(
     targeting_df: pd.DataFrame,
@@ -23,15 +25,7 @@ def generate_campaign_summary(
     if targeting_df.empty or "campaign_name" not in targeting_df.columns:
         return {"table": pd.DataFrame(), "wow_available": False}
 
-    agg_dict = {
-        "impressions": ("impressions", "sum"),
-        "clicks": ("clicks", "sum"),
-        "spend": ("spend", "sum"),
-        "sales": ("sales", "sum"),
-        "orders": ("orders", "sum"),
-    }
-
-    grouped = targeting_df.groupby("campaign_name").agg(**agg_dict).reset_index()
+    grouped = targeting_df.groupby("campaign_name").agg(**_METRIC_AGG).reset_index()
 
     # Propagate data_source: if any row for a campaign is supplemental, label it
     if "data_source" in targeting_df.columns:
@@ -42,25 +36,13 @@ def generate_campaign_summary(
         )
         grouped["data_source"] = grouped["campaign_name"].map(source_map)
     else:
-        grouped["data_source"] = "search_terms"
+        grouped["data_source"] = DATA_SOURCE_SEARCH_TERMS
 
     # Compute derived metrics
-    grouped["ctr"] = grouped.apply(
-        lambda r: r["clicks"] / r["impressions"] if r["impressions"] > 0 else 0,
-        axis=1,
-    )
-    grouped["avg_cpc"] = grouped.apply(
-        lambda r: r["spend"] / r["clicks"] if r["clicks"] > 0 else 0,
-        axis=1,
-    )
-    grouped["acos"] = grouped.apply(
-        lambda r: r["spend"] / r["sales"] if r["sales"] > 0 else None,
-        axis=1,
-    )
-    grouped["roas"] = grouped.apply(
-        lambda r: r["sales"] / r["spend"] if r["spend"] > 0 else None,
-        axis=1,
-    )
+    grouped["ctr"] = (grouped["clicks"] / grouped["impressions"]).where(grouped["impressions"] > 0, 0)
+    grouped["avg_cpc"] = (grouped["spend"] / grouped["clicks"]).where(grouped["clicks"] > 0, 0)
+    grouped["acos"] = (grouped["spend"] / grouped["sales"]).where(grouped["sales"] > 0, None)
+    grouped["roas"] = (grouped["sales"] / grouped["spend"]).where(grouped["spend"] > 0, None)
 
     result = {"table": grouped, "wow_available": False}
 

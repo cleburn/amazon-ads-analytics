@@ -9,6 +9,39 @@ Handles three report types:
 import pandas as pd
 
 
+# Data source labels used across the pipeline
+DATA_SOURCE_SEARCH_TERMS = "search_terms"
+DATA_SOURCE_DELTA = "targeting_report_delta"
+DATA_SOURCE_LIFETIME = "targeting_report_lifetime"
+
+# Standard aggregation for per-target performance metrics
+_METRIC_AGG = {
+    "impressions": ("impressions", "sum"),
+    "clicks": ("clicks", "sum"),
+    "spend": ("spend", "sum"),
+    "sales": ("sales", "sum"),
+    "orders": ("orders", "sum"),
+}
+
+
+def _compute_derived_metrics(df: pd.DataFrame) -> None:
+    """Add ctr, cpc, and acos columns to a targeting DataFrame in-place."""
+    df["ctr"] = (df["clicks"] / df["impressions"]).where(df["impressions"] > 0, 0)
+    df["cpc"] = (df["spend"] / df["clicks"]).where(df["clicks"] > 0, 0)
+    df["acos"] = (df["spend"] / df["sales"]).where(df["sales"] > 0, None)
+
+
+def enrich_with_bids(df: pd.DataFrame, bid_lookup: dict) -> None:
+    """Add bid and suggested bid columns to a targeting DataFrame in-place."""
+    if not bid_lookup:
+        return
+    bid_data = df["targeting"].map(lambda t: bid_lookup.get(t, {}))
+    df["bid"] = bid_data.map(lambda d: d.get("bid"))
+    df["suggested_bid_low"] = bid_data.map(lambda d: d.get("suggested_bid_low"))
+    df["suggested_bid_median"] = bid_data.map(lambda d: d.get("suggested_bid_median"))
+    df["suggested_bid_high"] = bid_data.map(lambda d: d.get("suggested_bid_high"))
+
+
 # Column map for per-campaign targeting report CSVs
 # Two variants: ASIN campaigns have "Categories & products", keyword campaigns have "Keyword"
 TARGETING_REPORT_COLUMN_MAP = {
@@ -97,30 +130,11 @@ def build_targeting_from_search_terms(search_term_df: pd.DataFrame) -> pd.DataFr
 
     grouped = (
         search_term_df.groupby(["campaign_name", "targeting"])
-        .agg(
-            impressions=("impressions", "sum"),
-            clicks=("clicks", "sum"),
-            spend=("spend", "sum"),
-            sales=("sales", "sum"),
-            orders=("orders", "sum"),
-        )
+        .agg(**_METRIC_AGG)
         .reset_index()
     )
 
-    # Compute derived metrics
-    grouped["ctr"] = grouped.apply(
-        lambda r: r["clicks"] / r["impressions"] if r["impressions"] > 0 else 0,
-        axis=1,
-    )
-    grouped["cpc"] = grouped.apply(
-        lambda r: r["spend"] / r["clicks"] if r["clicks"] > 0 else 0,
-        axis=1,
-    )
-    grouped["acos"] = grouped.apply(
-        lambda r: r["spend"] / r["sales"] if r["sales"] > 0 else None,
-        axis=1,
-    )
-
+    _compute_derived_metrics(grouped)
     grouped["targeting_raw"] = grouped["targeting"]
 
     return grouped
@@ -261,46 +275,27 @@ def build_supplemental_targeting(
     bid_lookup = bid_lookup or {}
     target_to_campaign = build_target_to_campaign_map(config)
 
-    # Get campaigns and targets already in search term data
-    existing_targets = set()
+    # Get campaigns already in search term data
     existing_campaigns = set()
     if not search_term_targeting_df.empty:
-        existing_targets = set(search_term_targeting_df["targeting"].unique())
         if "campaign_name" in search_term_targeting_df.columns:
             existing_campaigns = set(search_term_targeting_df["campaign_name"].unique())
 
     # Aggregate current lifetime by normalized targeting (sum exact + expanded)
-    current = targeting_report_df.copy()
     current_grouped = (
-        current.groupby("targeting")
-        .agg(
-            impressions=("impressions", "sum"),
-            clicks=("clicks", "sum"),
-            spend=("spend", "sum"),
-            orders=("orders", "sum"),
-            sales=("sales", "sum"),
-        )
-        .reset_index()
+        targeting_report_df.groupby("targeting").agg(**_METRIC_AGG).reset_index()
     )
 
     # Compute deltas if prior data available
     if prior_lifetime_df is not None and not prior_lifetime_df.empty:
         prior_grouped = (
-            prior_lifetime_df.groupby("targeting")
-            .agg(
-                impressions=("impressions", "sum"),
-                clicks=("clicks", "sum"),
-                spend=("spend", "sum"),
-                orders=("orders", "sum"),
-                sales=("sales", "sum"),
-            )
-            .reset_index()
+            prior_lifetime_df.groupby("targeting").agg(**_METRIC_AGG).reset_index()
         )
 
         merged = current_grouped.merge(
             prior_grouped, on="targeting", how="left", suffixes=("", "_prior")
         )
-        for col in ["impressions", "clicks", "spend", "orders", "sales"]:
+        for col in _METRIC_AGG:
             prior_col = f"{col}_prior"
             if prior_col in merged.columns:
                 merged[col] = merged[col] - merged[prior_col].fillna(0)
@@ -309,10 +304,10 @@ def build_supplemental_targeting(
         delta = merged.drop(
             columns=[c for c in merged.columns if c.endswith("_prior")]
         )
-        data_source = "targeting_report_delta"
+        data_source = DATA_SOURCE_DELTA
     else:
         delta = current_grouped
-        data_source = "targeting_report_lifetime"
+        data_source = DATA_SOURCE_LIFETIME
 
     # Map to campaign names via config (before filtering)
     delta["campaign_name"] = delta["targeting"].map(target_to_campaign)
@@ -332,29 +327,8 @@ def build_supplemental_targeting(
     if supplemental.empty:
         return pd.DataFrame()
 
-    # Add derived metrics
-    supplemental["ctr"] = supplemental.apply(
-        lambda r: r["clicks"] / r["impressions"] if r["impressions"] > 0 else 0,
-        axis=1,
-    )
-    supplemental["cpc"] = supplemental.apply(
-        lambda r: r["spend"] / r["clicks"] if r["clicks"] > 0 else 0,
-        axis=1,
-    )
-    supplemental["acos"] = supplemental.apply(
-        lambda r: r["spend"] / r["sales"] if r["sales"] > 0 else None,
-        axis=1,
-    )
-
-    # Enrich with bid data
-    supplemental["bid"] = supplemental["targeting"].map(
-        lambda t: bid_lookup.get(t, {}).get("bid"))
-    supplemental["suggested_bid_low"] = supplemental["targeting"].map(
-        lambda t: bid_lookup.get(t, {}).get("suggested_bid_low"))
-    supplemental["suggested_bid_median"] = supplemental["targeting"].map(
-        lambda t: bid_lookup.get(t, {}).get("suggested_bid_median"))
-    supplemental["suggested_bid_high"] = supplemental["targeting"].map(
-        lambda t: bid_lookup.get(t, {}).get("suggested_bid_high"))
+    _compute_derived_metrics(supplemental)
+    enrich_with_bids(supplemental, bid_lookup)
 
     supplemental["data_source"] = data_source
     supplemental["targeting_raw"] = supplemental["targeting"]

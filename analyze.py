@@ -11,7 +11,8 @@ import yaml
 from src.ingest.search_terms import load_search_term_report
 from src.ingest.targeting import (
     build_targeting_from_search_terms, load_targeting_reports,
-    build_bid_lookup, build_supplemental_targeting,
+    build_bid_lookup, build_supplemental_targeting, enrich_with_bids,
+    DATA_SOURCE_SEARCH_TERMS,
 )
 from src.ingest.kdp import load_kdp_report, load_kdp_orders
 from src.analysis.campaign_summary import generate_campaign_summary
@@ -106,26 +107,19 @@ def report(week, search_terms_paths, kdp_paths, targeting_paths,
 
     # Enrich targeting_df with bid + suggested bid data from targeting reports
     bid_lookup = {}
-    targeting_report_df = pd.DataFrame()
+    targeting_report_df = None
     if targeting_paths:
         targeting_report_df = load_targeting_reports(list(targeting_paths))
         click.echo(f"  Targeting reports: {len(targeting_report_df)} rows from {len(targeting_paths)} files")
         bid_lookup = build_bid_lookup(targeting_report_df)
         if not targeting_df.empty and bid_lookup:
-            targeting_df["bid"] = targeting_df["targeting"].map(
-                lambda t: bid_lookup.get(t, {}).get("bid"))
-            targeting_df["suggested_bid_low"] = targeting_df["targeting"].map(
-                lambda t: bid_lookup.get(t, {}).get("suggested_bid_low"))
-            targeting_df["suggested_bid_median"] = targeting_df["targeting"].map(
-                lambda t: bid_lookup.get(t, {}).get("suggested_bid_median"))
-            targeting_df["suggested_bid_high"] = targeting_df["targeting"].map(
-                lambda t: bid_lookup.get(t, {}).get("suggested_bid_high"))
+            enrich_with_bids(targeting_df, bid_lookup)
             enriched = targeting_df["bid"].notna().sum()
             click.echo(f"  Bid enrichment: {enriched}/{len(targeting_df)} targets matched")
 
     # Build supplemental targeting from targeting report deltas
     # (captures campaigns/targets not in search term data)
-    if not targeting_report_df.empty:
+    if targeting_report_df is not None:
         prior_lifetime_df = None
         try:
             from src.storage.snapshots import get_prior_targeting_lifetime
@@ -147,9 +141,8 @@ def report(week, search_terms_paths, kdp_paths, targeting_paths,
             bid_lookup=bid_lookup,
         )
         if not supplemental.empty:
-            # Mark existing search-term rows
             if "data_source" not in targeting_df.columns:
-                targeting_df["data_source"] = "search_terms"
+                targeting_df["data_source"] = DATA_SOURCE_SEARCH_TERMS
             targeting_df = pd.concat([targeting_df, supplemental], ignore_index=True)
             source = supplemental["data_source"].iloc[0]
             click.echo(
@@ -234,7 +227,7 @@ def report(week, search_terms_paths, kdp_paths, targeting_paths,
     campaign_summary = generate_campaign_summary(targeting_df, prior_week_df)
     asin_performance = analyze_asin_targets(
         targeting_df, config, bid_lookup=bid_lookup,
-        targeting_report_df=targeting_report_df if not targeting_report_df.empty else None,
+        targeting_report_df=targeting_report_df,
     )
     keyword_performance = analyze_keywords(targeting_df, config)
     search_term_analysis = analyze_search_terms(search_term_df, config)
@@ -303,7 +296,7 @@ def report(week, search_terms_paths, kdp_paths, targeting_paths,
                 campaign_summary=campaign_summary,
                 bid_recommendations=bid_recs,
                 drift_flags=search_term_analysis.get("drift_flags", []),
-                targeting_report_df=targeting_report_df if not targeting_report_df.empty else None,
+                targeting_report_df=targeting_report_df,
             )
             click.echo("Snapshot saved to database.")
         except ImportError:

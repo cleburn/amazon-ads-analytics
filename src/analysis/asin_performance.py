@@ -98,10 +98,11 @@ def analyze_asin_targets(
     # Build lifetime impression lookup from targeting reports (if available)
     lifetime_impressions = {}
     if targeting_report_df is not None and not targeting_report_df.empty:
-        for _, row in targeting_report_df.iterrows():
-            t = row.get("targeting", "")
-            # Sum across match types (exact + expanded) for same ASIN
-            lifetime_impressions[t] = lifetime_impressions.get(t, 0) + int(row.get("impressions", 0))
+        lifetime_impressions = (
+            targeting_report_df.groupby("targeting")["impressions"]
+            .sum()
+            .to_dict()
+        )
 
     # Detect zero-activity targets: configured but absent from targeting data
     # Targets may now appear in df via supplemental targeting report data
