@@ -6,7 +6,7 @@ Run every Monday (or whenever you want a fresh snapshot of the prior week).
 
 ## 1. Pull Fresh Exports
 
-You need **6+ files** each week: 1-2 search term reports, 1-2 KDP reports, and 4 targeting reports.
+You need **6 files** each week: 1 search term report, 1 KDP report, and 4 targeting reports.
 
 ### Amazon Ads — Search Term Report
 1. Go to **Amazon Advertising Console** → Reports → Search Term
@@ -23,7 +23,7 @@ You need **6+ files** each week: 1-2 search term reports, 1-2 KDP reports, and 4
    - Deconstruction Targeting
 4. These provide actual bids, Amazon's suggested bid ranges, and per-target state
 
-> **Note:** Targeting reports are lifetime cumulative. The pipeline extracts bid/suggested bid data only — weekly performance comes from the search term report.
+> **Note:** Targeting reports are lifetime cumulative. The pipeline extracts bid data for enrichment and saves full lifetime data for weekly delta computation. Weekly performance comes from the search term report; campaigns absent from search terms (Self Targeting, Deconstruction) are surfaced via targeting report deltas.
 
 ### KDP Sales Report
 1. Go to **KDP Reports** → **Orders** → set a custom date range covering the reporting period (e.g., Feb 23 – Mar 2) → **Generate Report** → Download
