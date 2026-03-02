@@ -43,8 +43,9 @@ def cli():
 @click.option("--search-terms", "search_terms_paths", required=True, multiple=True,
               type=click.Path(exists=True),
               help="Path to Search Term Report (CSV or XLSX). Can specify multiple.")
-@click.option("--kdp", "kdp_path", required=True,
-              type=click.Path(exists=True), help="Path to KDP Sales export (CSV or XLSX)")
+@click.option("--kdp", "kdp_paths", required=True, multiple=True,
+              type=click.Path(exists=True),
+              help="Path to KDP Sales export (CSV or XLSX). Can specify multiple.")
 @click.option("--targeting", "targeting_paths", multiple=True,
               type=click.Path(exists=True),
               help="Path to Targeting Report CSV (one per campaign). Can specify multiple.")
@@ -58,7 +59,7 @@ def cli():
               help="Skip terminal output (only write markdown)")
 @click.option("--output-dir", default="reports",
               help="Directory for markdown reports")
-def report(week, search_terms_paths, kdp_path, targeting_paths,
+def report(week, search_terms_paths, kdp_paths, targeting_paths,
            config_path, resolve_asins, save, no_terminal, output_dir):
     """Generate a weekly performance report from CSV/XLSX exports."""
     config = load_config(config_path)
@@ -118,14 +119,43 @@ def report(week, search_terms_paths, kdp_path, targeting_paths,
             enriched = targeting_df["bid"].notna().sum()
             click.echo(f"  Bid enrichment: {enriched}/{len(targeting_df)} targets matched")
 
-    # KDP sales
-    kdp_df = load_kdp_report(kdp_path)
-    click.echo(f"  KDP sales: {len(kdp_df)} rows")
+    # KDP sales (may be multiple files for cross-month boundaries)
+    kdp_frames = []
+    kdp_orders_frames = []
+    for path in kdp_paths:
+        df = load_kdp_report(path)
+        kdp_frames.append(df)
+        click.echo(f"  KDP sales ({os.path.basename(path)}): {len(df)} rows")
+        odf = load_kdp_orders(path)
+        if not odf.empty:
+            kdp_orders_frames.append(odf)
+            click.echo(f"  KDP daily orders ({os.path.basename(path)}): {len(odf)} rows")
 
-    # Daily KDP orders (for paired purchase detection)
-    kdp_orders_df = load_kdp_orders(kdp_path)
+    kdp_df = pd.concat(kdp_frames, ignore_index=True) if kdp_frames else pd.DataFrame()
+    kdp_orders_df = pd.concat(kdp_orders_frames, ignore_index=True) if kdp_orders_frames else pd.DataFrame()
+
+    # Deduplicate overlapping KDP exports (same row from multiple files)
+    if not kdp_df.empty:
+        kdp_dedup_cols = [c for c in ["date", "title", "format", "marketplace", "units_sold", "royalty"]
+                          if c in kdp_df.columns]
+        if kdp_dedup_cols:
+            before = len(kdp_df)
+            kdp_df = kdp_df.drop_duplicates(subset=kdp_dedup_cols, keep="first")
+            kdp_dupes = before - len(kdp_df)
+            if kdp_dupes:
+                click.echo(f"  KDP deduplicated: removed {kdp_dupes} overlapping rows")
+
     if not kdp_orders_df.empty:
-        click.echo(f"  KDP daily orders: {len(kdp_orders_df)} rows")
+        orders_dedup_cols = [c for c in ["date", "title", "format", "asin"]
+                             if c in kdp_orders_df.columns]
+        if orders_dedup_cols:
+            before = len(kdp_orders_df)
+            kdp_orders_df = kdp_orders_df.drop_duplicates(subset=orders_dedup_cols, keep="first")
+            orders_dupes = before - len(kdp_orders_df)
+            if orders_dupes:
+                click.echo(f"  KDP orders deduplicated: removed {orders_dupes} overlapping rows")
+
+    click.echo(f"  KDP sales total: {len(kdp_df)} rows")
 
     # Try to load prior week for WoW comparison
     prior_week_df = None

@@ -65,11 +65,11 @@ src/storage/
 
 - **Amazon Ads Search Term Report** (XLSX) — primary weekly performance data, one row per search term per target per day
 - **Amazon Ads Targeting Reports** (CSV, 4 per week) — per-campaign exports with actual bids, Amazon's suggested bid ranges, and target state. Lifetime cumulative; only bid data is extracted
-- **KDP Dashboard Report** (XLSX) — daily sales granularity for all formats
+- **KDP Dashboard Report** (XLSX, 1-2 per week) — daily sales granularity for all formats. Multiple files accepted for cross-month boundaries
 - **KDP Orders/Lifetime Report** (XLSX) — monthly granularity; used for historical context. Auto-detected by the tool
 - **ASIN Lookup** (`data/asin_lookup.json`) — maps competitor ASINs to book titles. Unknown ASINs auto-scraped from Amazon and cached
 
-Raw data files are gitignored. Place exports in `data/raw/` to run reports.
+Raw data files are gitignored. Exports are held in `data/raw/` to run reports, then moved to `data/archive/`
 
 ## Flags Generated
 

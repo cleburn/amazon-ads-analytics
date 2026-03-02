@@ -6,7 +6,7 @@ Run every Monday (or whenever you want a fresh snapshot of the prior week).
 
 ## 1. Pull Fresh Exports
 
-You need **6 files** each week: 1 search term report, 1 KDP report, and 4 targeting reports.
+You need **6+ files** each week: 1-2 search term reports, 1-2 KDP reports, and 4 targeting reports.
 
 ### Amazon Ads — Search Term Report
 1. Go to **Amazon Advertising Console** → Reports → Search Term
@@ -25,9 +25,10 @@ You need **6 files** each week: 1 search term report, 1 KDP report, and 4 target
 
 > **Note:** Targeting reports are lifetime cumulative. The pipeline extracts bid/suggested bid data only — weekly performance comes from the search term report.
 
-### KDP Dashboard Report
+### KDP Dashboard Report(s)
 1. Go to **KDP Dashboard** → select **This Month** → Download
 2. This gives daily granularity for all formats (Kindle + paperback)
+3. **Cross-month boundaries**: If the reporting period spans two months (e.g., Feb 24 – Mar 2), download "This Month" for **both** months — the tool accepts multiple `--kdp` files, concatenates them, and deduplicates overlapping rows
 
 ### Move Files into the Project
 
@@ -47,8 +48,8 @@ mv ~/Downloads/* data/raw/
 
 | # | File Pattern | Format | Source |
 |---|-------------|--------|--------|
-| 1 | `Sponsored_Products_Search_term_report*.xlsx` | XLSX | Amazon Ads Console |
-| 2 | `KDP_Dashboard-*.xlsx` | XLSX | KDP Dashboard |
+| 1+ | `Sponsored_Products_Search_term_report*.xlsx` | XLSX | Amazon Ads Console |
+| 2+ | `KDP_Dash*.xlsx` | XLSX | KDP Dashboard (1-2 files) |
 | 3-6 | `Sponsored_Products_Target*.csv` | CSV | Amazon Ads Console (1 per campaign) |
 
 ---
