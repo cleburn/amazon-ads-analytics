@@ -33,8 +33,8 @@ Pre-ad sales are entirely organic/email-driven. Any KDP sales before Jan 26, 202
 
 ## Campaign Structure
 
-4 campaigns at $45/day total (restructured Feb 23, 2026):
-- **ASIN Targeting** ($20/day): Mixed match types. Sophia Code PB/Kindle run on both exact + expanded. 6 other targets (Becoming Supernatural, Power of Now, Four Agreements, Autobiography of a Yogi) on expanded only. 14 paused targets. Sophia Code PB dominates impressions (~70-80%)
+4 campaigns at $50/day total:
+- **ASIN Targeting** ($25/day): Mixed match types. Sophia Code PB/Kindle run on both exact + expanded. 6 other targets (Becoming Supernatural, Power of Now, Four Agreements, Autobiography of a Yogi) on expanded only. 14 paused targets. Sophia Code PB dominates impressions (~70-80%)
 - **Keyword Targeting** ($10/day): 33 active broad-match keywords + 3 paused. Bids set to Amazon suggested bids
 - **Self Targeting** ($3/day): Book 1 product pages → Book 2. 2 exact match targets active, 2 expanded match paused
 - **Deconstruction Targeting** ($12/day): 13 competitor book ASINs in faith deconstruction/progressive Christianity space, all on expanded match. Authors: Richard Rohr, Rob Bell, Rachel Held Evans, Barbara Brown Taylor, Peter Enns, Cynthia Bourgeault

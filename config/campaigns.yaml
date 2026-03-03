@@ -49,7 +49,7 @@ timeline:
       targeting reports into pipeline; removed bid fields from config (bids now
       sourced from weekly targeting report exports).
 
-# Total daily budget: $45 ($20 + $10 + $3 + $12)
+# Total daily budget: $50 ($25 + $10 + $3 + $12)
 # Bids are NOT stored here — they come from weekly targeting report exports.
 # The config defines campaign structure (which targets, match types, active/paused).
 
@@ -57,7 +57,7 @@ campaigns:
   asin_targeting:
     name: "Ascension Book2 - ASIN Targeting"
     type: "product_targeting"
-    daily_budget: 20.00
+    daily_budget: 25.00
     start_date: "2026-01-26"
     note: >
       Mixed match types. Sophia Code runs on both exact + expanded.
