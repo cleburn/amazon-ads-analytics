@@ -8,6 +8,7 @@ import html
 import json
 import os
 import re
+import signal
 import time
 import urllib.request
 import urllib.error
@@ -79,16 +80,30 @@ def _clean_title(raw: str) -> str | None:
     return raw
 
 
+class _Timeout(Exception):
+    pass
+
+
+def _timeout_handler(signum, frame):
+    raise _Timeout()
+
+
 def _scrape_amazon_title(asin: str) -> str | None:
     """Attempt to scrape the product title from Amazon's product page.
 
     Returns the cleaned title string if successful, None if blocked/failed.
+    Uses a hard 15-second total timeout (SIGALRM) to prevent indefinite hangs
+    from slow responses, redirect chains, or CAPTCHA pages.
     """
     url = f"https://www.amazon.com/dp/{asin.upper()}"
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+
+    old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+    signal.alarm(15)  # hard 15-second total timeout
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             page = resp.read().decode("utf-8", errors="replace")
+        signal.alarm(0)
         # Try productTitle span first (most reliable when present)
         pt_match = re.search(r'id="productTitle"[^>]*>(.*?)</span>', page, re.DOTALL)
         if pt_match:
@@ -97,8 +112,11 @@ def _scrape_amazon_title(asin: str) -> str | None:
         title_match = re.search(r"<title[^>]*>(.*?)</title>", page, re.DOTALL)
         if title_match:
             return _clean_title(title_match.group(1).strip())
-    except (urllib.error.URLError, urllib.error.HTTPError, OSError):
+    except (_Timeout, urllib.error.URLError, urllib.error.HTTPError, OSError):
         pass
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
     return None
 
 
@@ -143,17 +161,37 @@ def resolve_asins(
 
     # Scrape unknown ASINs
     if scrape and unknown_asins:
+        import sys
+        total = len(unknown_asins)
+        consecutive_failures = 0
+        max_consecutive_failures = 5
+        print(f"  Scraping {total} unknown ASINs from Amazon...", file=sys.stderr)
         for i, asin in enumerate(unknown_asins):
             if i > 0:
                 time.sleep(_SCRAPE_DELAY)
+            print(f"    [{i+1}/{total}] {asin}...", end="", file=sys.stderr, flush=True)
             title = _scrape_amazon_title(asin)
             if title:
                 result[asin] = f"{title} ({asin})"
                 # Cache with uppercase canonical ASIN
                 canonical = asin.upper() if asin[0].lower() == "b" else asin
                 newly_resolved[canonical] = title
+                consecutive_failures = 0
+                print(f" OK", file=sys.stderr)
             else:
                 result[asin] = f"{asin} (unknown)"
+                consecutive_failures += 1
+                print(f" failed", file=sys.stderr)
+                if consecutive_failures >= max_consecutive_failures:
+                    remaining = total - i - 1
+                    print(
+                        f"  Stopping after {max_consecutive_failures} consecutive failures "
+                        f"({remaining} ASINs skipped — Amazon may be blocking)",
+                        file=sys.stderr,
+                    )
+                    for asin in unknown_asins[i + 1:]:
+                        result[asin] = f"{asin} (unknown)"
+                    break
 
     # Persist newly scraped titles
     if newly_resolved:

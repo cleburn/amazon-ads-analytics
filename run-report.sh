@@ -7,16 +7,16 @@ set -e
 
 WEEK="$1"
 if [ -z "$WEEK" ]; then
-    echo "Usage: ./run-report.sh <pull-date> [--save]"
+    echo "Usage: ./run-report.sh <pull-date> [--save] [extra flags...]"
     echo "  pull-date: the day you export data (report covers 7 days before it)"
     echo "  Example: ./run-report.sh 2026-02-23 --save"
+    echo "  Example: ./run-report.sh 2026-02-23 --save --no-resolve-asins"
     exit 1
 fi
 
-SAVE_FLAG=""
-if [ "$2" = "--save" ]; then
-    SAVE_FLAG="--save"
-fi
+# Collect all flags after the pull date
+shift
+EXTRA_FLAGS="$*"
 
 # Activate conda environment
 source /opt/homebrew/anaconda3/etc/profile.d/conda.sh
@@ -60,4 +60,4 @@ else
 fi
 echo ""
 
-eval python analyze.py report --week "$WEEK" $SEARCH_TERM_ARGS $KDP_ARGS $TARGETING_ARGS $SAVE_FLAG
+eval python analyze.py report --week "$WEEK" $SEARCH_TERM_ARGS $KDP_ARGS $TARGETING_ARGS $EXTRA_FLAGS
