@@ -7,11 +7,13 @@ book titles using a local JSON lookup file and optional Amazon scraping.
 import html
 import json
 import os
+import random
 import re
 import signal
 import time
 import urllib.request
 import urllib.error
+import urllib.parse
 
 
 # ASIN pattern: 10-char starting with B0 (Kindle) or 10-digit ISBN
@@ -22,12 +24,24 @@ _DEFAULT_LOOKUP_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "asin_lookup.json"
 )
 
-_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
+# Pool of realistic User-Agent strings for rotation
+_USER_AGENTS = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:125.0) Gecko/20100101 Firefox/125.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+]
 
-_SCRAPE_DELAY = 1.0  # seconds between Amazon requests
+# Delay range between requests (seconds) — randomized jitter
+_DELAY_MIN = 2.0
+_DELAY_MAX = 5.0
+
+# Exponential backoff on consecutive failures
+_BACKOFF_BASE = 10.0  # seconds after 1st failure
+_BACKOFF_MAX = 60.0   # cap per-request backoff
+_TOTAL_BACKOFF_BUDGET = 180.0  # stop retrying after this much total backoff time
 
 
 def is_asin(term: str) -> bool:
@@ -96,7 +110,8 @@ def _scrape_amazon_title(asin: str) -> str | None:
     from slow responses, redirect chains, or CAPTCHA pages.
     """
     url = f"https://www.amazon.com/dp/{asin.upper()}"
-    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    ua = random.choice(_USER_AGENTS)
+    req = urllib.request.Request(url, headers={"User-Agent": ua})
 
     old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
     signal.alarm(15)  # hard 15-second total timeout
@@ -112,6 +127,58 @@ def _scrape_amazon_title(asin: str) -> str | None:
         title_match = re.search(r"<title[^>]*>(.*?)</title>", page, re.DOTALL)
         if title_match:
             return _clean_title(title_match.group(1).strip())
+    except (_Timeout, urllib.error.URLError, urllib.error.HTTPError, OSError):
+        pass
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+    return None
+
+
+def _google_fallback_title(asin: str) -> str | None:
+    """Fall back to Google search to find an Amazon product title.
+
+    Searches for 'amazon.com/dp/{ASIN}' and extracts the title from the
+    search result snippet. Less likely to be blocked than direct Amazon scraping.
+    """
+    query = urllib.parse.quote(f"amazon.com/dp/{asin.upper()}")
+    url = f"https://www.google.com/search?q={query}"
+    ua = random.choice(_USER_AGENTS)
+    req = urllib.request.Request(url, headers={"User-Agent": ua})
+
+    old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+    signal.alarm(15)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            page = resp.read().decode("utf-8", errors="replace")
+        signal.alarm(0)
+
+        # Google wraps result titles in <h3> tags; the first one matching
+        # an Amazon-like pattern is our best bet
+        h3_matches = re.findall(r"<h3[^>]*>(.*?)</h3>", page, re.DOTALL)
+        for h3 in h3_matches:
+            # Strip HTML tags from the h3 content
+            text = re.sub(r"<[^>]+>", "", h3).strip()
+            text = html.unescape(text)
+            # Skip results that are clearly not product titles
+            if not text or "amazon" in text.lower() and len(text) < 15:
+                continue
+            cleaned = _clean_title(text)
+            if cleaned:
+                return cleaned
+
+        # Fallback: try <title>-style patterns in result snippets
+        # Google sometimes puts the title in span/div with specific classes
+        snippet_matches = re.findall(
+            r'(?:aria-level="3"|role="heading")[^>]*>(.*?)</(?:span|div|h3)',
+            page, re.DOTALL,
+        )
+        for snippet in snippet_matches:
+            text = re.sub(r"<[^>]+>", "", snippet).strip()
+            text = html.unescape(text)
+            cleaned = _clean_title(text)
+            if cleaned:
+                return cleaned
     except (_Timeout, urllib.error.URLError, urllib.error.HTTPError, OSError):
         pass
     finally:
@@ -164,34 +231,59 @@ def resolve_asins(
         import sys
         total = len(unknown_asins)
         consecutive_failures = 0
-        max_consecutive_failures = 5
-        print(f"  Scraping {total} unknown ASINs from Amazon...", file=sys.stderr)
+        total_backoff_used = 0.0
+        print(f"  Resolving {total} unknown ASINs...", file=sys.stderr)
         for i, asin in enumerate(unknown_asins):
             if i > 0:
-                time.sleep(_SCRAPE_DELAY)
+                delay = random.uniform(_DELAY_MIN, _DELAY_MAX)
+                time.sleep(delay)
             print(f"    [{i+1}/{total}] {asin}...", end="", file=sys.stderr, flush=True)
+
+            # Try Amazon direct scrape first
             title = _scrape_amazon_title(asin)
+            source = "amazon"
+
+            # Fall back to Google if Amazon failed
+            if not title:
+                time.sleep(random.uniform(1.0, 2.0))
+                title = _google_fallback_title(asin)
+                source = "google"
+
             if title:
                 result[asin] = f"{title} ({asin})"
-                # Cache with uppercase canonical ASIN
                 canonical = asin.upper() if asin[0].lower() == "b" else asin
                 newly_resolved[canonical] = title
                 consecutive_failures = 0
-                print(f" OK", file=sys.stderr)
+                label = " OK" if source == "amazon" else " OK (google)"
+                print(label, file=sys.stderr)
             else:
                 result[asin] = f"{asin} (unknown)"
                 consecutive_failures += 1
                 print(f" failed", file=sys.stderr)
-                if consecutive_failures >= max_consecutive_failures:
-                    remaining = total - i - 1
+
+                # Exponential backoff on consecutive failures
+                if consecutive_failures > 0:
+                    backoff = min(
+                        _BACKOFF_BASE * (2 ** (consecutive_failures - 1)),
+                        _BACKOFF_MAX,
+                    )
+                    total_backoff_used += backoff
+                    if total_backoff_used > _TOTAL_BACKOFF_BUDGET:
+                        remaining = total - i - 1
+                        print(
+                            f"  Stopping — backoff budget exhausted "
+                            f"({remaining} ASINs skipped)",
+                            file=sys.stderr,
+                        )
+                        for remaining_asin in unknown_asins[i + 1:]:
+                            result[remaining_asin] = f"{remaining_asin} (unknown)"
+                        break
                     print(
-                        f"  Stopping after {max_consecutive_failures} consecutive failures "
-                        f"({remaining} ASINs skipped — Amazon may be blocking)",
+                        f"    Backing off {backoff:.0f}s "
+                        f"({consecutive_failures} consecutive failures)...",
                         file=sys.stderr,
                     )
-                    for asin in unknown_asins[i + 1:]:
-                        result[asin] = f"{asin} (unknown)"
-                    break
+                    time.sleep(backoff)
 
     # Persist newly scraped titles
     if newly_resolved:
@@ -199,3 +291,26 @@ def resolve_asins(
         _save_lookup(lookup, lookup_path)
 
     return result
+
+
+def retry_unknown_asins(
+    unknown_asins: list[str],
+    lookup_path: str | None = None,
+) -> dict[str, str]:
+    """Retry resolution for a list of ASINs not yet in the lookup file.
+
+    Returns dict of {ASIN: title} for newly resolved entries.
+    """
+    if lookup_path is None:
+        lookup_path = _DEFAULT_LOOKUP_PATH
+
+    resolved = resolve_asins(
+        terms=unknown_asins,
+        lookup_path=lookup_path,
+        scrape=True,
+    )
+    # Return only the ones that resolved to actual titles (not "unknown")
+    return {
+        asin: display for asin, display in resolved.items()
+        if "(unknown)" not in display
+    }

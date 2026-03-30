@@ -219,7 +219,18 @@ def load_targeting_reports(filepaths: list) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
 
-    return pd.concat(frames, ignore_index=True)
+    result = pd.concat(frames, ignore_index=True)
+
+    # Backfill any metric columns that Amazon may have dropped from the export
+    # (e.g., Clicks/CTR/CPC were removed from targeting reports circa Mar 2026)
+    for col, default in [
+        ("impressions", 0), ("clicks", 0), ("spend", 0.0),
+        ("sales", 0.0), ("orders", 0), ("kenp_read", 0),
+    ]:
+        if col not in result.columns:
+            result[col] = default
+
+    return result
 
 
 def build_target_to_campaign_map(config: dict) -> dict:

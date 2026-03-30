@@ -387,5 +387,70 @@ def lifetime():
         click.echo("Storage module not available. Build Phase 2 first.")
 
 
+@cli.command("resolve-asins")
+@click.option(
+    "--lookup", "lookup_path", default=None,
+    help="Path to asin_lookup.json (default: data/asin_lookup.json)",
+)
+def resolve_asins_cmd(lookup_path):
+    """Retry resolution for unknown ASINs found in search term history.
+
+    Scans the database for search terms that look like ASINs but aren't
+    in asin_lookup.json, then attempts to resolve them via Amazon scraping
+    with Google fallback.
+    """
+    from src.utils.asin_resolver import (
+        is_asin, retry_unknown_asins, _load_lookup, _DEFAULT_LOOKUP_PATH,
+    )
+
+    if lookup_path is None:
+        lookup_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "asin_lookup.json"
+        )
+
+    # Load current lookup to find what's already resolved
+    lookup = _load_lookup(lookup_path)
+    lookup_lower = {k.lower() for k in lookup}
+
+    # Pull distinct search terms from the database
+    try:
+        from src.storage.database import get_connection
+        conn = get_connection()
+        rows = conn.execute(
+            "SELECT DISTINCT search_term FROM search_term_metrics"
+        ).fetchall()
+        conn.close()
+        all_terms = [r[0] for r in rows]
+    except Exception as e:
+        click.echo(f"Could not read database: {e}", err=True)
+        click.echo("Falling back to current search term report if available.", err=True)
+        all_terms = []
+
+    if not all_terms:
+        click.echo("No search terms found in database. Run 'report --save' first.")
+        return
+
+    # Filter to ASINs not in the lookup
+    unknown = [t for t in all_terms if is_asin(t) and t.strip().lower() not in lookup_lower]
+
+    if not unknown:
+        click.echo(f"All ASINs already resolved ({len(lookup)} in lookup).")
+        return
+
+    click.echo(f"Found {len(unknown)} unresolved ASINs (out of {len(lookup)} known).")
+    newly_resolved = retry_unknown_asins(unknown, lookup_path=lookup_path)
+
+    if newly_resolved:
+        click.echo(f"\nResolved {len(newly_resolved)} new ASINs:")
+        for asin, display in sorted(newly_resolved.items()):
+            click.echo(f"  {display}")
+    else:
+        click.echo("\nNo new ASINs resolved this run. Try again later.")
+
+    still_unknown = len(unknown) - len(newly_resolved)
+    if still_unknown > 0:
+        click.echo(f"  {still_unknown} ASINs still unresolved.")
+
+
 if __name__ == "__main__":
     cli()
