@@ -19,7 +19,7 @@ shift
 EXTRA_FLAGS="$*"
 
 # Activate conda environment
-source /opt/homebrew/anaconda3/etc/profile.d/conda.sh
+source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate ascension-ads
 
 # Auto-discover files in data/raw/

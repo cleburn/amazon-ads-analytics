@@ -1,0 +1,40 @@
+name: ascension-ads
+channels:
+  - defaults
+dependencies:
+  - bzip2=1.0.8=h80987f9_6
+  - ca-certificates=2025.12.2=hca03da5_0
+  - expat=2.7.4=h50f4ffc_0
+  - libcxx=21.1.8=hb4ce287_0
+  - libexpat=2.7.4=h50f4ffc_0
+  - libffi=3.4.4=hca03da5_1
+  - libzlib=1.3.1=h5f15de7_0
+  - ncurses=6.5=hee39554_0
+  - openssl=3.0.19=ha0b305a_0
+  - packaging=25.0=py311hca03da5_1
+  - pip=26.0.1=pyhc872135_0
+  - python=3.11.14=hf701271_0
+  - readline=8.3=h0b18652_0
+  - setuptools=80.10.2=py311hca03da5_0
+  - sqlite=3.51.1=hab6afd1_0
+  - tk=8.6.15=hcd8a7d5_0
+  - tzdata=2025c=he532380_0
+  - wheel=0.46.3=py311hca03da5_0
+  - xz=5.6.4=h80987f9_1
+  - zlib=1.3.1=h5f15de7_0
+  - pip:
+      - click==8.3.1
+      - et-xmlfile==2.0.0
+      - iniconfig==2.3.0
+      - markdown-it-py==4.0.0
+      - mdurl==0.1.2
+      - numpy==2.4.2
+      - openpyxl==3.1.5
+      - pandas==3.0.0
+      - pluggy==1.6.0
+      - pygments==2.19.2
+      - pytest==9.0.2
+      - python-dateutil==2.9.0.post0
+      - pyyaml==6.0.3
+      - rich==14.3.2
+      - six==1.17.0
